@@ -1,59 +1,121 @@
-# KorpTesteGabrielTamarossi
+Containerized foundation for an Angular frontend and two independent Go microservices backed by PostgreSQL.
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.22.
+## Architecture
 
-## Development server
+```text
+Angular frontend
+   |
+   +----> Inventory Service ----> Inventory PostgreSQL
+   |
+   +----> Billing Service ------> Billing PostgreSQL
 
-To start a local development server, run:
-
-```bash
-ng serve
+Later:
+Billing Service ----HTTP----> Inventory Service
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Each microservice owns its database. The inventory service never accesses the billing database, and the billing service never accesses the inventory database. Future service-to-service communication will use HTTP through Docker service names.
 
-## Code scaffolding
+## Major directories
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+- `frontend/`: the Angular CLI-generated standalone application and its development Dockerfile.
+- `backend/inventory-service/`: independent Go module for the inventory API and inventory database connection.
+- `backend/billing-service/`: independent Go module for the billing API and billing database connection.
+- `internal/database/`: PostgreSQL pool creation and startup connectivity check in each service.
+- `internal/health/`: the HTTP health handler in each service.
+- `cmd/api/`: each service's executable entry point, HTTP server, CORS configuration, and graceful shutdown.
 
-```bash
-ng generate component component-name
-```
+Feature packages and database migrations will be introduced when their first real product or invoice behavior is implemented. The initial scaffold intentionally contains no speculative domain, service, or repository layers.
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Requirements
 
-```bash
-ng generate --help
-```
+- Docker
+- Docker Compose
+- Git
 
-## Building
+Go, Node.js, npm, Angular CLI, and PostgreSQL are not required on the host.
 
-To build the project run:
+## Environment configuration
 
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+Compose includes safe development defaults so the stack starts immediately after cloning. To customize them, create a local environment file:
 
 ```bash
-ng test
+cp .env.example .env
 ```
 
-## Running end-to-end tests
+The `.env` file is ignored by Git. Do not use development credentials in production.
 
-For end-to-end (e2e) testing, run:
+## Run the application
+
+Build and start all containers:
 
 ```bash
-ng e2e
+docker compose up --build
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+Stop and remove the application containers:
 
-## Additional Resources
+```bash
+docker compose down
+```
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Stop the application and delete its persisted development database data and dependency caches:
+
+```bash
+docker compose down -v
+```
+
+Warning: `-v` permanently deletes the data in both development PostgreSQL volumes.
+
+## URLs and ports
+
+| Component            | URL or host port             |
+| -------------------- | ---------------------------- |
+| Frontend             | http://localhost:4200        |
+| Inventory health     | http://localhost:8081/health |
+| Billing health       | http://localhost:8082/health |
+| Inventory PostgreSQL | localhost:5433               |
+| Billing PostgreSQL   | localhost:5434               |
+
+Both API health endpoints return:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+## Useful Docker-only commands
+
+Run Go tests:
+
+```bash
+docker compose exec inventory-service go test ./...
+docker compose exec billing-service go test ./...
+```
+
+Update a service's Go module metadata after changing its dependencies:
+
+```bash
+docker compose exec inventory-service go mod tidy
+docker compose exec billing-service go mod tidy
+```
+
+Run Angular commands inside the frontend container:
+
+```bash
+docker compose exec frontend npm test
+docker compose exec frontend npm run build
+```
+
+Inspect service logs:
+
+```bash
+docker compose logs inventory-service billing-service
+```
+
+After editing Go source code, rebuild and recreate the affected service:
+
+```bash
+docker compose up --build --detach inventory-service
+docker compose up --build --detach billing-service
+```

@@ -1,0 +1,121 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+      - frontend-angular-cache:/app/.angular/cache
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1:4200"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - challenge-network
+
+  inventory-service:
+    build:
+      context: ./backend/inventory-service
+    environment:
+      PORT: ${INVENTORY_SERVICE_PORT:-8081}
+      DATABASE_URL: postgres://${INVENTORY_DB_USER:-inventory}:${INVENTORY_DB_PASSWORD:-inventory_dev_password}@inventory-db:5432/${INVENTORY_DB_NAME:-inventory}?sslmode=disable
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:4200}
+      GIN_MODE: release
+    ports:
+      - "${INVENTORY_SERVICE_PORT:-8081}:${INVENTORY_SERVICE_PORT:-8081}"
+    volumes:
+      - ./backend/inventory-service:/app
+      - inventory-go-mod-cache:/go/pkg/mod
+      - inventory-go-build-cache:/root/.cache/go-build
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:${INVENTORY_SERVICE_PORT:-8081}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - challenge-network
+
+  billing-service:
+    build:
+      context: ./backend/billing-service
+    environment:
+      PORT: ${BILLING_SERVICE_PORT:-8082}
+      DATABASE_URL: postgres://${BILLING_DB_USER:-billing}:${BILLING_DB_PASSWORD:-billing_dev_password}@billing-db:5432/${BILLING_DB_NAME:-billing}?sslmode=disable
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:4200}
+      INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL:-http://inventory-service:8081}
+      GIN_MODE: release
+    ports:
+      - "${BILLING_SERVICE_PORT:-8082}:${BILLING_SERVICE_PORT:-8082}"
+    volumes:
+      - ./backend/billing-service:/app
+      - billing-go-mod-cache:/go/pkg/mod
+      - billing-go-build-cache:/root/.cache/go-build
+    depends_on:
+      billing-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:${BILLING_SERVICE_PORT:-8082}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - challenge-network
+
+  inventory-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${INVENTORY_DB_USER:-inventory}
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD:-inventory_dev_password}
+      POSTGRES_DB: ${INVENTORY_DB_NAME:-inventory}
+    ports:
+      - "5433:5432"
+    volumes:
+      - inventory-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - challenge-network
+
+  billing-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${BILLING_DB_USER:-billing}
+      POSTGRES_PASSWORD: ${BILLING_DB_PASSWORD:-billing_dev_password}
+      POSTGRES_DB: ${BILLING_DB_NAME:-billing}
+    ports:
+      - "5434:5432"
+    volumes:
+      - billing-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - challenge-network
+
+volumes:
+  frontend-node-modules:
+  frontend-angular-cache:
+  inventory-go-mod-cache:
+  inventory-go-build-cache:
+  billing-go-mod-cache:
+  billing-go-build-cache:
+  inventory-db-data:
+  billing-db-data:
+
+networks:
+  challenge-network:
+    driver: bridge

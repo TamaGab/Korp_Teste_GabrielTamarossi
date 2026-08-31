@@ -1,0 +1,17 @@
+:host {
+  display: block;
+  font-family: Arial, sans-serif;
+}
+
+main {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+h1,
+p {
+  margin: 0;
+}
