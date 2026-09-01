@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -111,8 +112,9 @@ func requiredEnvironment(name string) (string, error) {
 
 func corsMiddleware(allowedOrigin string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.GetHeader("Origin") == allowedOrigin {
-			c.Header("Access-Control-Allow-Origin", allowedOrigin)
+		requestOrigin := c.GetHeader("Origin")
+		if originAllowed(requestOrigin, allowedOrigin) {
+			c.Header("Access-Control-Allow-Origin", requestOrigin)
 			c.Header("Vary", "Origin")
 			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
@@ -125,4 +127,30 @@ func corsMiddleware(allowedOrigin string) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func originAllowed(requestOrigin, configuredOrigin string) bool {
+	if requestOrigin == configuredOrigin {
+		return true
+	}
+
+	requestURL, requestErr := url.Parse(requestOrigin)
+	configuredURL, configuredErr := url.Parse(configuredOrigin)
+	if requestErr != nil || configuredErr != nil || !plainOrigin(requestURL) || !plainOrigin(configuredURL) {
+		return false
+	}
+	if requestURL.Scheme != configuredURL.Scheme || requestURL.Port() != configuredURL.Port() {
+		return false
+	}
+
+	return localHostname(requestURL.Hostname()) && localHostname(configuredURL.Hostname())
+}
+
+func plainOrigin(origin *url.URL) bool {
+	return origin.Scheme != "" && origin.Host != "" && origin.User == nil && origin.Path == "" &&
+		origin.RawQuery == "" && origin.Fragment == ""
+}
+
+func localHostname(hostname string) bool {
+	return hostname == "localhost" || hostname == "127.0.0.1"
 }
