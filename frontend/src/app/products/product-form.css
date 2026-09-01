@@ -1,0 +1,66 @@
+:host {
+  display: block;
+  margin: 0 auto;
+  max-width: 46rem;
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header > a {
+  margin-bottom: 1.25rem;
+  margin-left: -1rem;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  letter-spacing: -0.04em;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin-top: 0.5rem;
+}
+
+mat-card {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.alert {
+  background: #fff0ed;
+  border: 1px solid #efb5ad;
+  border-radius: 0.6rem;
+  color: #8d2117;
+  margin-bottom: 1rem;
+  padding: 0.8rem 1rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}

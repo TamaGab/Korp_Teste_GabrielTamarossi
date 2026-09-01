@@ -1,0 +1,77 @@
+:host {
+  display: block;
+}
+
+.hero {
+  max-width: 58rem;
+  padding-top: clamp(2rem, 8vh, 7rem);
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2.5rem, 7vw, 5.5rem);
+  font-weight: 650;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  max-width: 16ch;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+}
+
+.lead {
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-top: 1.5rem;
+  max-width: 38rem;
+}
+
+mat-card {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: 1rem;
+  margin-top: 3rem;
+  max-width: 42rem;
+}
+
+mat-card-content {
+  align-items: center;
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: auto 1fr auto;
+  padding: 1.5rem;
+}
+
+mat-card-content > mat-icon {
+  color: var(--accent);
+  height: 2rem;
+  width: 2rem;
+}
+
+mat-card-content p {
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 640px) {
+  mat-card-content {
+    align-items: start;
+    grid-template-columns: auto 1fr;
+  }
+
+  mat-card-content a {
+    grid-column: 1 / -1;
+  }
+}

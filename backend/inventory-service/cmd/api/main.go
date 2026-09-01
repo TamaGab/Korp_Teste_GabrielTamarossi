@@ -13,6 +13,7 @@ import (
 
 	"github.com/TamaGab/Korp_Teste_GabrielTamarossi/backend/inventory-service/internal/database"
 	"github.com/TamaGab/Korp_Teste_GabrielTamarossi/backend/inventory-service/internal/health"
+	"github.com/TamaGab/Korp_Teste_GabrielTamarossi/backend/inventory-service/internal/product"
 	"github.com/gin-gonic/gin"
 )
 
@@ -51,10 +52,15 @@ func run(logger *slog.Logger) error {
 	}
 	defer pool.Close()
 	logger.Info("database connection established")
+	if err := database.Migrate(connectionContext, pool); err != nil {
+		return fmt.Errorf("migrate inventory database: %w", err)
+	}
+	logger.Info("database migrations applied")
 
 	router := gin.New()
 	router.Use(gin.Recovery(), corsMiddleware(allowedOrigin))
 	router.GET("/health", health.Handler)
+	product.RegisterRoutes(router, pool)
 
 	server := &http.Server{
 		Addr:              ":" + port,

@@ -1,0 +1,57 @@
+<header class="page-header">
+  <a mat-button routerLink="/products"><mat-icon>arrow_back</mat-icon>Products</a>
+  <p class="eyebrow">Inventory</p>
+  <h1>New Product</h1>
+  <p class="subtitle">Register a Product before using it in an invoice.</p>
+</header>
+
+<mat-card appearance="outlined">
+  <mat-card-content>
+    @if (generalError()) {
+      <div class="alert" role="alert">{{ generalError() }}</div>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <mat-form-field appearance="outline">
+        <mat-label>Product Code</mat-label>
+        <input
+          matInput
+          formControlName="code"
+          maxlength="5"
+          autocomplete="off"
+          placeholder="AAA00"
+          (input)="uppercaseCode()"
+        />
+        <mat-hint>Three letters followed by two numbers</mat-hint>
+        @if (form.controls.code.hasError('duplicate')) {
+          <mat-error>Product Code already exists</mat-error>
+        } @else if (form.controls.code.touched && form.controls.code.invalid) {
+          <mat-error>Use the format AAA00</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Description</mat-label>
+        <input matInput formControlName="description" maxlength="200" />
+        @if (form.controls.description.touched && form.controls.description.invalid) {
+          <mat-error>Description is required and can contain up to 200 characters</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Available Stock</mat-label>
+        <input matInput type="number" min="0" step="1" formControlName="stock" />
+        @if (form.controls.stock.touched && form.controls.stock.invalid) {
+          <mat-error>Available Stock must be a non-negative whole number</mat-error>
+        }
+      </mat-form-field>
+
+      <div class="actions">
+        <a mat-button routerLink="/products">Cancel</a>
+        <button mat-flat-button type="submit" [disabled]="submitting()">
+          {{ submitting() ? 'Saving...' : 'Create Product' }}
+        </button>
+      </div>
+    </form>
+  </mat-card-content>
+</mat-card>

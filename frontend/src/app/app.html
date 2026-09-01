@@ -1,6 +1,48 @@
-<main>
-  <h1>Technical Challenge</h1>
-  <p>Frontend running successfully.</p>
-</main>
+<mat-sidenav-container>
+  <mat-sidenav
+    #sidenav
+    [mode]="isCompactNavigation() ? 'over' : 'side'"
+    [opened]="!isCompactNavigation()"
+  >
+    <a class="brand" routerLink="/" (click)="closeAfterNavigation(sidenav)">
+      <span class="brand-mark">K</span>
+      <span>Korp Inventory</span>
+    </a>
 
-<router-outlet />
+    <mat-nav-list>
+      <a
+        mat-list-item
+        routerLink="/"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        (click)="closeAfterNavigation(sidenav)"
+      >
+        <mat-icon matListItemIcon>home</mat-icon>
+        <span matListItemTitle>Home</span>
+      </a>
+      <a
+        mat-list-item
+        routerLink="/products"
+        routerLinkActive="active"
+        (click)="closeAfterNavigation(sidenav)"
+      >
+        <mat-icon matListItemIcon>inventory_2</mat-icon>
+        <span matListItemTitle>Products</span>
+      </a>
+    </mat-nav-list>
+
+    <p class="sidenav-footer">Technical challenge · 2026</p>
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+    @if (isCompactNavigation()) {
+      <mat-toolbar>
+        <button type="button" aria-label="Open navigation" (click)="sidenav.toggle()">
+          <mat-icon>menu</mat-icon>
+        </button>
+        <span>Korp Inventory</span>
+      </mat-toolbar>
+    }
+    <main><router-outlet /></main>
+  </mat-sidenav-content>
+</mat-sidenav-container>
