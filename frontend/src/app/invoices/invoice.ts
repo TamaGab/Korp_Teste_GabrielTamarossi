@@ -1,6 +1,6 @@
 export interface Invoice {
   number: string;
-  status: "OPEN" | "CLOSED";
+  status: 'OPEN' | 'CLOSED';
   lines: InvoiceLine[];
   createdAt: string;
 }
@@ -11,7 +11,7 @@ export interface InvoiceLine {
   quantity: number;
 }
 
-export type InvoiceSummary = Omit<Invoice, "lines">;
+export type InvoiceSummary = Omit<Invoice, 'lines'>;
 
 export interface CreateInvoice {
   lines: CreateInvoiceLine[];
@@ -28,11 +28,11 @@ export interface PreparedInvoicePrint {
 
 export interface PrintPreparationProblem {
   productCode: string;
-  reason: "product_not_found" | "insufficient_stock";
+  reason: 'product_not_found' | 'insufficient_stock';
   availableStock?: number;
   requestedQuantity: number;
 }
 
-export function invoiceStatusLabel(status: Invoice["status"]) {
-  return status === "OPEN" ? "Aberta" : "Fechada";
+export function invoiceStatusLabel(status: Invoice['status']) {
+  return status === 'OPEN' ? 'Aberta' : 'Fechada';
 }
