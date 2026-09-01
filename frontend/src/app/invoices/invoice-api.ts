@@ -30,4 +30,11 @@ export class InvoiceApi {
       {},
     );
   }
+
+  close(number: string) {
+    return this.http.post<Pick<Invoice, "number" | "status">>(
+      `${this.invoicesUrl}/${number}/close`,
+      {},
+    );
+  }
 }

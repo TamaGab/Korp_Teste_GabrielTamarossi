@@ -21,18 +21,24 @@
         <button
           mat-flat-button
           type="button"
-          [disabled]="preparingPrint()"
+          [disabled]="preparingPrint() || closingInvoice()"
           (click)="preparePrint()"
         >
-          {{ preparingPrint() ? 'Verificando estoque...' : 'Imprimir' }}
+          {{
+            closingInvoice()
+              ? 'Finalizando nota fiscal...'
+              : preparingPrint()
+                ? 'Verificando estoque...'
+                : 'Imprimir'
+          }}
         </button>
       }
     </div>
   </header>
 
-  @if (printErrorMessages().length > 0) {
+  @if (actionErrorMessages().length > 0) {
     <div class="print-errors" role="alert">
-      @for (message of printErrorMessages(); track message) {
+      @for (message of actionErrorMessages(); track message) {
         <p>{{ message }}</p>
       }
     </div>

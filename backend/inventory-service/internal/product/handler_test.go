@@ -348,6 +348,155 @@ func TestStockValidationRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestInvoiceCanConsumeEveryStockLineAtomically(t *testing.T) {
+	router := newTestRouter(t)
+	firstResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":5}`)
+	secondResponse := performRequest(router, http.MethodPost, "/products", `{"code":"MON01","description":"Monitor","stock":3}`)
+	var laptop product.Product
+	var monitor product.Product
+	decodeResponse(t, firstResponse, &laptop)
+	decodeResponse(t, secondResponse, &monitor)
+
+	response := performRequest(router, http.MethodPost, "/stock/consume", fmt.Sprintf(`{
+		"invoiceNumber":"0001",
+		"lines":[
+			{"inventoryProductId":%d,"quantity":2},
+			{"inventoryProductId":%d,"quantity":3}
+		]
+	}`, laptop.ID, monitor.ID))
+	if response.Code != http.StatusOK || response.Body.String() != `{"problems":[]}` {
+		t.Fatalf("POST /stock/consume = %d / %s, want 200 with no problems", response.Code, response.Body.String())
+	}
+
+	for productID, wantStock := range map[int]int{laptop.ID: 3, monitor.ID: 0} {
+		getResponse := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", productID), "")
+		var consumed product.Product
+		decodeResponse(t, getResponse, &consumed)
+		if consumed.Stock != wantStock {
+			t.Fatalf("Product %d stock = %d, want %d", productID, consumed.Stock, wantStock)
+		}
+	}
+}
+
+func TestStockConsumptionRejectsEveryBlockingLineWithoutChangingStock(t *testing.T) {
+	router := newTestRouter(t)
+	firstResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":2}`)
+	secondResponse := performRequest(router, http.MethodPost, "/products", `{"code":"MON01","description":"Monitor","stock":4}`)
+	var laptop product.Product
+	var monitor product.Product
+	decodeResponse(t, firstResponse, &laptop)
+	decodeResponse(t, secondResponse, &monitor)
+
+	response := performRequest(router, http.MethodPost, "/stock/consume", fmt.Sprintf(`{
+		"invoiceNumber":"0001",
+		"lines":[
+			{"inventoryProductId":%d,"quantity":3},
+			{"inventoryProductId":9999,"quantity":1},
+			{"inventoryProductId":%d,"quantity":1}
+		]
+	}`, laptop.ID, monitor.ID))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /stock/consume status = %d, want 422; body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Problems []struct {
+			InventoryProductID int    `json:"inventoryProductId"`
+			Reason             string `json:"reason"`
+		} `json:"problems"`
+	}
+	decodeResponse(t, response, &body)
+	if len(body.Problems) != 2 || body.Problems[0].InventoryProductID != laptop.ID || body.Problems[0].Reason != "insufficient_stock" || body.Problems[1].InventoryProductID != 9999 || body.Problems[1].Reason != "product_not_found" {
+		t.Fatalf("POST /stock/consume problems = %+v, want insufficient Laptop and missing Product", body.Problems)
+	}
+
+	for _, current := range []product.Product{laptop, monitor} {
+		getResponse := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", current.ID), "")
+		var unchanged product.Product
+		decodeResponse(t, getResponse, &unchanged)
+		if unchanged.Stock != current.Stock {
+			t.Fatalf("Product %d stock = %d, want unchanged %d", current.ID, unchanged.Stock, current.Stock)
+		}
+	}
+}
+
+func TestRepeatingStockConsumptionWithTheSameInvoiceAndLinesDoesNotConsumeAgain(t *testing.T) {
+	router := newTestRouter(t)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":5}`)
+	var laptop product.Product
+	decodeResponse(t, createResponse, &laptop)
+	body := fmt.Sprintf(`{"invoiceNumber":"0001","lines":[{"inventoryProductId":%d,"quantity":2}]}`, laptop.ID)
+
+	firstResponse := performRequest(router, http.MethodPost, "/stock/consume", body)
+	secondResponse := performRequest(router, http.MethodPost, "/stock/consume", body)
+	if firstResponse.Code != http.StatusOK || secondResponse.Code != http.StatusOK {
+		t.Fatalf("repeated POST /stock/consume statuses = %d / %d, want 200 / 200", firstResponse.Code, secondResponse.Code)
+	}
+
+	getResponse := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", laptop.ID), "")
+	var consumed product.Product
+	decodeResponse(t, getResponse, &consumed)
+	if consumed.Stock != 3 {
+		t.Fatalf("Product stock after repeated consumption = %d, want 3", consumed.Stock)
+	}
+}
+
+func TestRepeatingStockConsumptionWithDifferentLinesIsRejectedWithoutChangingStock(t *testing.T) {
+	router := newTestRouter(t)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":5}`)
+	var laptop product.Product
+	decodeResponse(t, createResponse, &laptop)
+
+	firstResponse := performRequest(router, http.MethodPost, "/stock/consume", fmt.Sprintf(`{"invoiceNumber":"0001","lines":[{"inventoryProductId":%d,"quantity":2}]}`, laptop.ID))
+	secondResponse := performRequest(router, http.MethodPost, "/stock/consume", fmt.Sprintf(`{"invoiceNumber":"0001","lines":[{"inventoryProductId":%d,"quantity":1}]}`, laptop.ID))
+	if firstResponse.Code != http.StatusOK || secondResponse.Code != http.StatusConflict {
+		t.Fatalf("divergent POST /stock/consume statuses = %d / %d, want 200 / 409", firstResponse.Code, secondResponse.Code)
+	}
+
+	getResponse := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", laptop.ID), "")
+	var consumed product.Product
+	decodeResponse(t, getResponse, &consumed)
+	if consumed.Stock != 3 {
+		t.Fatalf("Product stock after divergent retry = %d, want 3", consumed.Stock)
+	}
+}
+
+func TestConcurrentInvoicesCannotConsumeTheSameLastUnits(t *testing.T) {
+	router := newTestRouter(t)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":3}`)
+	var laptop product.Product
+	decodeResponse(t, createResponse, &laptop)
+
+	responses := make(chan *httptest.ResponseRecorder, 2)
+	start := make(chan struct{})
+	var requests sync.WaitGroup
+	for _, invoiceNumber := range []string{"0001", "0002"} {
+		requests.Add(1)
+		go func() {
+			defer requests.Done()
+			<-start
+			body := fmt.Sprintf(`{"invoiceNumber":%q,"lines":[{"inventoryProductId":%d,"quantity":3}]}`, invoiceNumber, laptop.ID)
+			responses <- performRequest(router, http.MethodPost, "/stock/consume", body)
+		}()
+	}
+	close(start)
+	requests.Wait()
+	close(responses)
+
+	statusCounts := map[int]int{}
+	for response := range responses {
+		statusCounts[response.Code]++
+	}
+	if statusCounts[http.StatusOK] != 1 || statusCounts[http.StatusUnprocessableEntity] != 1 {
+		t.Fatalf("concurrent POST /stock/consume statuses = %#v, want one 200 and one 422", statusCounts)
+	}
+	getResponse := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", laptop.ID), "")
+	var consumed product.Product
+	decodeResponse(t, getResponse, &consumed)
+	if consumed.Stock != 0 {
+		t.Fatalf("Product stock after concurrent consumption = %d, want 0", consumed.Stock)
+	}
+}
+
 func TestDatabasePreservesProductInvariants(t *testing.T) {
 	pool := newTestPool(t)
 	tests := []struct {
@@ -404,7 +553,7 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), "TRUNCATE products RESTART IDENTITY"); err != nil {
+	if _, err := pool.Exec(context.Background(), "TRUNCATE stock_consumptions, products RESTART IDENTITY"); err != nil {
 		t.Fatalf("reset products: %v", err)
 	}
 	return pool

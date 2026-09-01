@@ -53,16 +53,21 @@ type validatedLine struct {
 	InventoryProductID int
 }
 
-type stockValidationRequest struct {
-	Lines []stockValidationLine `json:"lines"`
+type stockRequest struct {
+	Lines []stockLine `json:"lines"`
 }
 
-type stockValidationLine struct {
+type stockConsumptionRequest struct {
+	InvoiceNumber string      `json:"invoiceNumber"`
+	Lines         []stockLine `json:"lines"`
+}
+
+type stockLine struct {
 	InventoryProductID int `json:"inventoryProductId"`
 	Quantity           int `json:"quantity"`
 }
 
-type stockValidationResponse struct {
+type stockResponse struct {
 	Problems []inventoryStockProblem `json:"problems"`
 }
 
@@ -120,6 +125,127 @@ func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool, inventoryURL string,
 	router.GET("/invoices", h.list)
 	router.GET("/invoices/:number", h.get)
 	router.POST("/invoices/:number/prepare-print", h.preparePrint)
+	router.POST("/invoices/:number/close", h.close)
+}
+
+func (h handler) close(c *gin.Context) {
+	number, err := strconv.ParseInt(c.Param("number"), 10, 64)
+	if err != nil || number <= 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+		return
+	}
+
+	transaction, err := h.pool.Begin(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+		return
+	}
+	defer func() { _ = transaction.Rollback(c.Request.Context()) }()
+
+	var status string
+	var closingPending bool
+	if err := transaction.QueryRow(c.Request.Context(), `
+		SELECT status, closing_pending
+		FROM invoices
+		WHERE number = $1
+		FOR UPDATE
+	`, number).Scan(&status, &closingPending); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+		return
+	}
+	if status == "CLOSED" {
+		if err := transaction.Commit(c.Request.Context()); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"number": fmt.Sprintf("%04d", number), "status": "CLOSED"})
+		return
+	}
+
+	rows, err := transaction.Query(c.Request.Context(), `
+		SELECT inventory_product_id, quantity
+		FROM invoice_lines
+		WHERE invoice_number = $1
+		ORDER BY inventory_product_id
+	`, number)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+		return
+	}
+	lines := make([]stockLine, 0)
+	for rows.Next() {
+		var line stockLine
+		if err := rows.Scan(&line.InventoryProductID, &line.Quantity); err != nil {
+			rows.Close()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+			return
+		}
+		lines = append(lines, line)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+		return
+	}
+	if !closingPending {
+		if _, err := transaction.Exec(c.Request.Context(), `
+			UPDATE invoices SET closing_pending = TRUE WHERE number = $1
+		`, number); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+			return
+		}
+	}
+	if err := transaction.Commit(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+		return
+	}
+
+	consumption, inventoryStatus, err := h.consumeStock(c.Request.Context(), fmt.Sprintf("%04d", number), lines)
+	if err != nil || (inventoryStatus != http.StatusOK && inventoryStatus != http.StatusUnprocessableEntity && inventoryStatus != http.StatusConflict) {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "inventory unavailable"})
+		return
+	}
+	if inventoryStatus != http.StatusOK {
+		c.JSON(inventoryStatus, consumption)
+		return
+	}
+
+	if _, err := h.pool.Exec(c.Request.Context(), `
+		UPDATE invoices
+		SET status = 'CLOSED', closing_pending = FALSE
+		WHERE number = $1
+	`, number); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"number": fmt.Sprintf("%04d", number), "status": "CLOSED"})
+}
+
+func (h handler) consumeStock(ctx context.Context, invoiceNumber string, lines []stockLine) (stockResponse, int, error) {
+	payload, err := json.Marshal(stockConsumptionRequest{InvoiceNumber: invoiceNumber, Lines: lines})
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, h.inventoryURL+"/stock/consume", bytes.NewReader(payload))
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := h.httpClient.Do(request)
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	defer response.Body.Close()
+
+	var consumption stockResponse
+	if err := json.NewDecoder(response.Body).Decode(&consumption); err != nil {
+		return stockResponse{}, response.StatusCode, fmt.Errorf("decode stock consumption: %w", err)
+	}
+	return consumption, response.StatusCode, nil
 }
 
 func (h handler) preparePrint(c *gin.Context) {
@@ -168,7 +294,7 @@ func (h handler) preparePrint(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	validationLines := make([]stockValidationLine, 0)
+	validationLines := make([]stockLine, 0)
 	printLines := make([]InvoiceLine, 0)
 	productCodes := make(map[int]string)
 	for rows.Next() {
@@ -178,7 +304,7 @@ func (h handler) preparePrint(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not prepare invoice print"})
 			return
 		}
-		validationLines = append(validationLines, stockValidationLine{InventoryProductID: productID, Quantity: line.Quantity})
+		validationLines = append(validationLines, stockLine{InventoryProductID: productID, Quantity: line.Quantity})
 		printLines = append(printLines, line)
 		productCodes[productID] = line.Code
 	}
@@ -224,25 +350,25 @@ func (h handler) preparePrint(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"html": html.String()})
 }
 
-func (h handler) validateStock(ctx context.Context, lines []stockValidationLine) (stockValidationResponse, int, error) {
-	payload, err := json.Marshal(stockValidationRequest{Lines: lines})
+func (h handler) validateStock(ctx context.Context, lines []stockLine) (stockResponse, int, error) {
+	payload, err := json.Marshal(stockRequest{Lines: lines})
 	if err != nil {
-		return stockValidationResponse{}, 0, err
+		return stockResponse{}, 0, err
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, h.inventoryURL+"/stock/validate", bytes.NewReader(payload))
 	if err != nil {
-		return stockValidationResponse{}, 0, err
+		return stockResponse{}, 0, err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := h.httpClient.Do(request)
 	if err != nil {
-		return stockValidationResponse{}, 0, err
+		return stockResponse{}, 0, err
 	}
 	defer response.Body.Close()
 
-	var validation stockValidationResponse
+	var validation stockResponse
 	if err := json.NewDecoder(response.Body).Decode(&validation); err != nil {
-		return stockValidationResponse{}, response.StatusCode, fmt.Errorf("decode stock validation: %w", err)
+		return stockResponse{}, response.StatusCode, fmt.Errorf("decode stock validation: %w", err)
 	}
 	return validation, response.StatusCode, nil
 }

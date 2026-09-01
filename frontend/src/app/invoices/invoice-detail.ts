@@ -30,8 +30,9 @@ export class InvoiceDetail implements OnInit {
   readonly invoice = signal<Invoice | null>(null);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
-  readonly printErrorMessages = signal<string[]>([]);
+  readonly actionErrorMessages = signal<string[]>([]);
   readonly preparingPrint = signal(false);
+  readonly closingInvoice = signal(false);
   readonly statusLabel = invoiceStatusLabel;
   readonly displayedColumns = ['code', 'description', 'quantity'];
 
@@ -55,12 +56,12 @@ export class InvoiceDetail implements OnInit {
 
   preparePrint() {
     const current = this.invoice();
-    if (!current || current.status !== 'OPEN' || this.preparingPrint()) {
+    if (!current || current.status !== 'OPEN' || this.preparingPrint() || this.closingInvoice()) {
       return;
     }
 
     this.preparingPrint.set(true);
-    this.printErrorMessages.set([]);
+    this.actionErrorMessages.set([]);
     this.invoiceApi
       .preparePrint(current.number)
       .pipe(finalize(() => this.preparingPrint.set(false)))
@@ -76,27 +77,58 @@ export class InvoiceDetail implements OnInit {
           const printWindow = printFrame.contentWindow;
           if (!printWindow) {
             printFrame.remove();
-            this.printErrorMessages.set(['Não foi possível abrir a impressão. Tente novamente.']);
+            this.actionErrorMessages.set(['Não foi possível abrir a impressão. Tente novamente.']);
             return;
           }
-          printWindow.addEventListener('afterprint', () => printFrame.remove(), {
-            once: true,
-          });
+          let closingStarted = false;
+          const finishPrinting = () => {
+            if (closingStarted) {
+              return;
+            }
+            closingStarted = true;
+            printWindow.removeEventListener('afterprint', finishPrinting);
+            window.removeEventListener('afterprint', finishPrinting);
+            printFrame.remove();
+            this.closeInvoice(current.number);
+          };
+          printWindow.addEventListener('afterprint', finishPrinting, { once: true });
+          window.addEventListener('afterprint', finishPrinting, { once: true });
           printWindow.document.open();
           printWindow.document.write(prepared.html);
           printWindow.document.close();
           printWindow.focus();
           printWindow.print();
+          finishPrinting();
         },
         error: (error: HttpErrorResponse) => {
           const problems = error.error?.problems;
           if (error.status === 422 && Array.isArray(problems)) {
-            this.printErrorMessages.set(
+            this.actionErrorMessages.set(
               problems.map((problem: PrintPreparationProblem) => this.stockProblemMessage(problem)),
             );
             return;
           }
-          this.printErrorMessages.set(['Não foi possível verificar o estoque. Tente novamente.']);
+          this.actionErrorMessages.set(['Não foi possível verificar o estoque. Tente novamente.']);
+        },
+      });
+  }
+
+  private closeInvoice(number: string) {
+    this.closingInvoice.set(true);
+    this.actionErrorMessages.set([]);
+    this.invoiceApi
+      .close(number)
+      .pipe(finalize(() => this.closingInvoice.set(false)))
+      .subscribe({
+        next: (closed) => {
+          this.invoice.update((current) =>
+            current ? { ...current, status: closed.status } : current,
+          );
+        },
+        error: () => {
+          this.actionErrorMessages.set([
+            'Não foi possível finalizar a nota fiscal. Tente novamente.',
+          ]);
         },
       });
   }

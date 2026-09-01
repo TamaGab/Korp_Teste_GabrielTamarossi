@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -382,6 +383,153 @@ func TestPreparingPrintKeepsOpenInvoiceWhenInventoryIsUnavailable(t *testing.T) 
 	decodeResponse(t, getResponse, &current)
 	if current.Status != "OPEN" {
 		t.Fatalf("Invoice status after unavailable inventory = %q, want OPEN", current.Status)
+	}
+}
+
+func TestUserCanCloseAnOpenInvoiceAndConsumeItsPersistedLines(t *testing.T) {
+	var consumptionBody struct {
+		InvoiceNumber string `json:"invoiceNumber"`
+		Lines         []struct {
+			InventoryProductID int `json:"inventoryProductId"`
+			Quantity           int `json:"quantity"`
+		} `json:"lines"`
+	}
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/products":
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"Laptop","stock":5}]`))
+		case "/stock/consume":
+			if request.Method != http.MethodPost {
+				http.NotFound(response, request)
+				return
+			}
+			if err := json.NewDecoder(request.Body).Decode(&consumptionBody); err != nil {
+				t.Errorf("decode Stock Consumption request: %v", err)
+			}
+			_, _ = response.Write([]byte(`{"problems":[]}`))
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	t.Cleanup(inventory.Close)
+	router := newTestRouter(t, inventory.URL)
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":2}]}`)
+
+	closeResponse := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
+	if closeResponse.Code != http.StatusOK {
+		t.Fatalf("POST /invoices/0001/close status = %d, want 200; body = %s", closeResponse.Code, closeResponse.Body.String())
+	}
+	if consumptionBody.InvoiceNumber != "0001" || len(consumptionBody.Lines) != 1 || consumptionBody.Lines[0].InventoryProductID != 1 || consumptionBody.Lines[0].Quantity != 2 {
+		t.Fatalf("Stock Consumption body = %+v, want Invoice 0001 and persisted Laptop line", consumptionBody)
+	}
+
+	getResponse := performRequest(router, http.MethodGet, "/invoices/0001", "")
+	var closed invoice.Invoice
+	decodeResponse(t, getResponse, &closed)
+	if closed.Status != "CLOSED" {
+		t.Fatalf("Invoice status after closing = %q, want CLOSED", closed.Status)
+	}
+}
+
+func TestInvoiceClosingPersistsPendingBeforeRequestingStockConsumption(t *testing.T) {
+	var billingPool *pgxpool.Pool
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/products" {
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"Laptop","stock":5}]`))
+			return
+		}
+		var status string
+		var closingPending bool
+		if err := billingPool.QueryRow(context.Background(), `SELECT status, closing_pending FROM invoices WHERE number = 1`).Scan(&status, &closingPending); err != nil {
+			t.Errorf("read Invoice while inventory is called: %v", err)
+		}
+		if status != "OPEN" || !closingPending {
+			t.Errorf("Invoice while inventory is called = %s / pending %t, want OPEN / true", status, closingPending)
+		}
+		_, _ = response.Write([]byte(`{"problems":[]}`))
+	}))
+	t.Cleanup(inventory.Close)
+	router, pool := newTestRouterWithPool(t, inventory.URL)
+	billingPool = pool
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":1}]}`)
+
+	response := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("POST /invoices/0001/close status = %d, want 200; body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPendingInvoiceClosingCanRetryWithoutPreparingOrPrintingAgain(t *testing.T) {
+	consumptionAttempts := 0
+	var firstBody map[string]any
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/products" {
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"Laptop","stock":5}]`))
+			return
+		}
+		consumptionAttempts++
+		var body map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Errorf("decode Stock Consumption attempt: %v", err)
+		}
+		if consumptionAttempts == 1 {
+			firstBody = body
+			response.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = response.Write([]byte(`{"error":"unavailable"}`))
+			return
+		}
+		if !reflect.DeepEqual(body, firstBody) {
+			t.Errorf("retried Stock Consumption body = %#v, want %#v", body, firstBody)
+		}
+		_, _ = response.Write([]byte(`{"problems":[]}`))
+	}))
+	t.Cleanup(inventory.Close)
+	router := newTestRouter(t, inventory.URL)
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":2}]}`)
+
+	firstClose := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
+	if firstClose.Code != http.StatusBadGateway {
+		t.Fatalf("first POST close status = %d, want 502; body = %s", firstClose.Code, firstClose.Body.String())
+	}
+	getResponse := performRequest(router, http.MethodGet, "/invoices/0001", "")
+	var pending invoice.Invoice
+	decodeResponse(t, getResponse, &pending)
+	if pending.Status != "OPEN" {
+		t.Fatalf("Invoice after failed close = %q, want OPEN", pending.Status)
+	}
+	prepareResponse := performRequest(router, http.MethodPost, "/invoices/0001/prepare-print", "")
+	if prepareResponse.Code != http.StatusConflict {
+		t.Fatalf("prepare pending Invoice status = %d, want 409", prepareResponse.Code)
+	}
+
+	secondClose := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
+	if secondClose.Code != http.StatusOK || consumptionAttempts != 2 {
+		t.Fatalf("retried POST close = %d with %d attempts, want 200 with 2 attempts", secondClose.Code, consumptionAttempts)
+	}
+}
+
+func TestRepeatingACompletedInvoiceClosingDoesNotCallInventoryAgain(t *testing.T) {
+	consumptionAttempts := 0
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/products" {
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"Laptop","stock":5}]`))
+			return
+		}
+		consumptionAttempts++
+		_, _ = response.Write([]byte(`{"problems":[]}`))
+	}))
+	t.Cleanup(inventory.Close)
+	router := newTestRouter(t, inventory.URL)
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":2}]}`)
+
+	firstClose := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
+	secondClose := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
+	if firstClose.Code != http.StatusOK || secondClose.Code != http.StatusOK || consumptionAttempts != 1 {
+		t.Fatalf("repeated POST close = %d / %d with %d Stock Consumptions, want 200 / 200 with one", firstClose.Code, secondClose.Code, consumptionAttempts)
 	}
 }
 

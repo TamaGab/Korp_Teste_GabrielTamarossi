@@ -1,9 +1,13 @@
 package product
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -31,11 +35,16 @@ type productRequest struct {
 	Stock       *int   `json:"stock"`
 }
 
-type stockValidationRequest struct {
-	Lines []stockValidationLine `json:"lines"`
+type stockRequest struct {
+	Lines []stockLine `json:"lines"`
 }
 
-type stockValidationLine struct {
+type stockConsumptionRequest struct {
+	InvoiceNumber string      `json:"invoiceNumber"`
+	Lines         []stockLine `json:"lines"`
+}
+
+type stockLine struct {
 	InventoryProductID int `json:"inventoryProductId"`
 	Quantity           int `json:"quantity"`
 }
@@ -59,11 +68,122 @@ func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool) {
 	router.PUT("/products/:id", h.update)
 	router.DELETE("/products/:id", h.delete)
 	router.POST("/stock/validate", h.validateStock)
+	router.POST("/stock/consume", h.consumeStock)
+}
+
+func (h handler) consumeStock(c *gin.Context) {
+	var request stockConsumptionRequest
+	if err := c.ShouldBindJSON(&request); err != nil || request.InvoiceNumber == "" || !validStockLines(request.Lines) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	transaction, err := h.pool.Begin(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+		return
+	}
+	defer func() { _ = transaction.Rollback(c.Request.Context()) }()
+
+	canonicalLines := append([]stockLine(nil), request.Lines...)
+	sort.Slice(canonicalLines, func(first, second int) bool {
+		return canonicalLines[first].InventoryProductID < canonicalLines[second].InventoryProductID
+	})
+	payload, err := json.Marshal(canonicalLines)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+		return
+	}
+	payloadHash := sha256.Sum256(payload)
+	var insertedInvoiceNumber string
+	err = transaction.QueryRow(c.Request.Context(), `
+		INSERT INTO stock_consumptions (invoice_number, payload_hash)
+		VALUES ($1, $2)
+		ON CONFLICT DO NOTHING
+		RETURNING invoice_number
+	`, request.InvoiceNumber, payloadHash[:]).Scan(&insertedInvoiceNumber)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var storedHash []byte
+		if err := transaction.QueryRow(c.Request.Context(), `
+			SELECT payload_hash FROM stock_consumptions WHERE invoice_number = $1
+		`, request.InvoiceNumber).Scan(&storedHash); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+			return
+		}
+		if !bytes.Equal(storedHash, payloadHash[:]) {
+			c.JSON(http.StatusConflict, gin.H{"error": "invoice stock consumption payload differs"})
+			return
+		}
+		if err := transaction.Commit(c.Request.Context()); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"problems": []stockProblem{}})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+		return
+	}
+
+	productIDs := make([]int, len(request.Lines))
+	for index, line := range request.Lines {
+		productIDs[index] = line.InventoryProductID
+	}
+	rows, err := transaction.Query(c.Request.Context(), `
+		SELECT id, stock
+		FROM products
+		WHERE id = ANY($1)
+		ORDER BY id
+		FOR UPDATE
+	`, productIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+		return
+	}
+
+	stockByProductID := make(map[int]int, len(request.Lines))
+	for rows.Next() {
+		var productID int
+		var stock int
+		if err := rows.Scan(&productID, &stock); err != nil {
+			rows.Close()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+			return
+		}
+		stockByProductID[productID] = stock
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+		return
+	}
+
+	problems := stockProblems(request.Lines, stockByProductID)
+	if len(problems) > 0 {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"problems": problems})
+		return
+	}
+	for _, line := range request.Lines {
+		if _, err := transaction.Exec(c.Request.Context(), `
+			UPDATE products
+			SET stock = stock - $1, updated_at = clock_timestamp()
+			WHERE id = $2
+		`, line.Quantity, line.InventoryProductID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+			return
+		}
+	}
+	if err := transaction.Commit(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not consume stock"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"problems": []stockProblem{}})
 }
 
 func (h handler) validateStock(c *gin.Context) {
-	var request stockValidationRequest
-	if err := c.ShouldBindJSON(&request); err != nil || !validStockValidation(request) {
+	var request stockRequest
+	if err := c.ShouldBindJSON(&request); err != nil || !validStockLines(request.Lines) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
@@ -98,8 +218,18 @@ func (h handler) validateStock(c *gin.Context) {
 		return
 	}
 
+	problems := stockProblems(request.Lines, stockByProductID)
+
+	status := http.StatusOK
+	if len(problems) > 0 {
+		status = http.StatusUnprocessableEntity
+	}
+	c.JSON(status, gin.H{"problems": problems})
+}
+
+func stockProblems(lines []stockLine, stockByProductID map[int]int) []stockProblem {
 	problems := make([]stockProblem, 0)
-	for _, line := range request.Lines {
+	for _, line := range lines {
 		availableStock, exists := stockByProductID[line.InventoryProductID]
 		if !exists {
 			problems = append(problems, stockProblem{
@@ -118,20 +248,15 @@ func (h handler) validateStock(c *gin.Context) {
 			})
 		}
 	}
-
-	status := http.StatusOK
-	if len(problems) > 0 {
-		status = http.StatusUnprocessableEntity
-	}
-	c.JSON(status, gin.H{"problems": problems})
+	return problems
 }
 
-func validStockValidation(request stockValidationRequest) bool {
-	if len(request.Lines) == 0 {
+func validStockLines(lines []stockLine) bool {
+	if len(lines) == 0 {
 		return false
 	}
-	seen := make(map[int]struct{}, len(request.Lines))
-	for _, line := range request.Lines {
+	seen := make(map[int]struct{}, len(lines))
+	for _, line := range lines {
 		if line.InventoryProductID <= 0 || line.Quantity <= 0 {
 			return false
 		}
