@@ -33,6 +33,8 @@ export class ProductForm {
 
   readonly submitting = signal(false);
   readonly generalError = signal('');
+  private existingCodes = new Set<string>();
+  private codeManuallyEdited = false;
   readonly form = new FormGroup({
     code: new FormControl('', {
       nonNullable: true,
@@ -49,15 +51,25 @@ export class ProductForm {
   });
 
   constructor() {
+    this.productApi.list().subscribe({
+      next: (products) => {
+        this.existingCodes = new Set(products.map((product) => product.code));
+        this.suggestCode();
+      },
+    });
     this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.generalError.set('');
     });
+    this.form.controls.description.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.suggestCode());
     this.form.controls.code.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.clearDuplicateError());
   }
 
   uppercaseCode() {
+    this.codeManuallyEdited = true;
     const code = this.form.controls.code.value.toUpperCase();
     this.form.controls.code.setValue(code, { emitEvent: false });
     this.clearDuplicateError();
@@ -106,5 +118,35 @@ export class ProductForm {
     }
     const { duplicate: _, ...otherErrors } = control.errors ?? {};
     control.setErrors(Object.keys(otherErrors).length ? otherErrors : null);
+  }
+
+  private suggestCode() {
+    if (this.codeManuallyEdited) {
+      return;
+    }
+
+    const prefix = this.form.controls.description.value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Za-z]/g, '')
+      .slice(0, 3)
+      .toUpperCase();
+    if (prefix.length !== 3) {
+      this.form.controls.code.setValue('', { emitEvent: false });
+      return;
+    }
+
+    for (let suffix = 1; suffix <= 99; suffix++) {
+      const code = `${prefix}${suffix.toString().padStart(2, '0')}`;
+      if (!this.existingCodes.has(code)) {
+        this.form.controls.code.setValue(code, { emitEvent: false });
+        return;
+      }
+    }
+
+    const codeControl = this.form.controls.code;
+    codeControl.setValue('', { emitEvent: false });
+    codeControl.setErrors({ exhausted: true });
+    codeControl.markAsTouched();
   }
 }

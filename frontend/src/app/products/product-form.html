@@ -23,10 +23,14 @@
           (input)="uppercaseCode()"
         />
         <mat-hint>Three letters followed by two numbers</mat-hint>
-        @if (form.controls.code.hasError('duplicate')) {
-          <mat-error>Product Code already exists</mat-error>
+        @if (form.controls.code.hasError('exhausted')) {
+          <mat-error>
+            Todos os códigos deste prefixo estão em uso. Altere o prefixo manualmente.
+          </mat-error>
+        } @else if (form.controls.code.hasError('duplicate')) {
+          <mat-error>Este código já está cadastrado.</mat-error>
         } @else if (form.controls.code.touched && form.controls.code.invalid) {
-          <mat-error>Use the format AAA00</mat-error>
+          <mat-error>Use o formato AAA00</mat-error>
         }
       </mat-form-field>
 

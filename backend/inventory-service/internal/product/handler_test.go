@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/TamaGab/Korp_Teste_GabrielTamarossi/backend/inventory-service/internal/database"
@@ -91,6 +92,35 @@ func TestCreateProductRejectsDuplicateCode(t *testing.T) {
 	decodeResponse(t, response, &errorBody)
 	if errorBody["error"] != "product code already exists" {
 		t.Fatalf("duplicate POST /products error = %q, want product code already exists", errorBody["error"])
+	}
+}
+
+func TestConcurrentCreateProductAllowsOnlyOneProductCode(t *testing.T) {
+	router := newTestRouter(t)
+	body := `{"code":"LAP01","description":"Laptop","stock":1}`
+
+	responses := make(chan *httptest.ResponseRecorder, 2)
+	start := make(chan struct{})
+	var requests sync.WaitGroup
+	for range 2 {
+		requests.Add(1)
+		go func() {
+			defer requests.Done()
+			<-start
+			responses <- performRequest(router, http.MethodPost, "/products", body)
+		}()
+	}
+
+	close(start)
+	requests.Wait()
+	close(responses)
+
+	statusCounts := map[int]int{}
+	for response := range responses {
+		statusCounts[response.Code]++
+	}
+	if statusCounts[http.StatusCreated] != 1 || statusCounts[http.StatusConflict] != 1 {
+		t.Fatalf("concurrent POST /products statuses = %#v, want one 201 and one 409", statusCounts)
 	}
 }
 
