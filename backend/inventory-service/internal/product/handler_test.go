@@ -523,6 +523,21 @@ func TestDatabasePreservesProductInvariants(t *testing.T) {
 	}
 }
 
+func TestDatabaseRejectsDuplicateProductCode(t *testing.T) {
+	pool := newTestPool(t)
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO products (code, description, stock) VALUES ('LAP01', 'Laptop', 1)
+	`); err != nil {
+		t.Fatalf("insert first Product: %v", err)
+	}
+
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO products (code, description, stock) VALUES ('LAP01', 'Outro laptop', 2)
+	`); err == nil {
+		t.Fatal("database accepted a duplicate Product Code")
+	}
+}
+
 func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	pool := newTestPool(t)

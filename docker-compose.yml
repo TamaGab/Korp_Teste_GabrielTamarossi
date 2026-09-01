@@ -4,6 +4,20 @@ services:
       context: ./frontend
     ports:
       - "4200:4200"
+    command:
+      - npm
+      - start
+      - --
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4200"
+      - --poll
+      - "1000"
+      - --define
+      - '__INVENTORY_API_URL__="http://localhost:${INVENTORY_SERVICE_PORT:-8081}"'
+      - --define
+      - '__BILLING_API_URL__="http://localhost:${BILLING_SERVICE_PORT:-8082}"'
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules
@@ -21,12 +35,12 @@ services:
     build:
       context: ./backend/inventory-service
     environment:
-      PORT: ${INVENTORY_SERVICE_PORT:-8081}
+      PORT: 8081
       DATABASE_URL: postgres://${INVENTORY_DB_USER:-inventory}:${INVENTORY_DB_PASSWORD:-inventory_dev_password}@inventory-db:5432/${INVENTORY_DB_NAME:-inventory}?sslmode=disable
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:4200}
       GIN_MODE: release
     ports:
-      - "${INVENTORY_SERVICE_PORT:-8081}:${INVENTORY_SERVICE_PORT:-8081}"
+      - "${INVENTORY_SERVICE_PORT:-8081}:8081"
     volumes:
       - ./backend/inventory-service:/app
       - inventory-go-mod-cache:/go/pkg/mod
@@ -35,7 +49,7 @@ services:
       inventory-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:${INVENTORY_SERVICE_PORT:-8081}/health"]
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:8081/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -47,13 +61,13 @@ services:
     build:
       context: ./backend/billing-service
     environment:
-      PORT: ${BILLING_SERVICE_PORT:-8082}
+      PORT: 8082
       DATABASE_URL: postgres://${BILLING_DB_USER:-billing}:${BILLING_DB_PASSWORD:-billing_dev_password}@billing-db:5432/${BILLING_DB_NAME:-billing}?sslmode=disable
       CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:4200}
       INVENTORY_SERVICE_URL: ${INVENTORY_SERVICE_URL:-http://inventory-service:8081}
       GIN_MODE: release
     ports:
-      - "${BILLING_SERVICE_PORT:-8082}:${BILLING_SERVICE_PORT:-8082}"
+      - "${BILLING_SERVICE_PORT:-8082}:8082"
     volumes:
       - ./backend/billing-service:/app
       - billing-go-mod-cache:/go/pkg/mod
@@ -62,7 +76,7 @@ services:
       billing-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:${BILLING_SERVICE_PORT:-8082}/health"]
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://localhost:8082/health"]
       interval: 10s
       timeout: 5s
       retries: 10

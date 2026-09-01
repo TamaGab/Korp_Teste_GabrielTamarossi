@@ -14,7 +14,7 @@ import { Product } from './product';
 import { ProductApi } from './product-api';
 
 type StockFilter = 'all' | 'in-stock' | 'out-of-stock';
-type SortColumn = 'code' | 'description' | 'stock' | 'createdAt' | 'updatedAt';
+type SortColumn = 'id' | 'code' | 'description' | 'stock' | 'createdAt' | 'updatedAt';
 
 @Component({
   selector: 'app-delete-product-dialog',
@@ -56,7 +56,15 @@ export class ProductList implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
 
-  readonly displayedColumns = ['code', 'description', 'stock', 'createdAt', 'updatedAt', 'actions'];
+  readonly displayedColumns = [
+    'id',
+    'code',
+    'description',
+    'stock',
+    'createdAt',
+    'updatedAt',
+    'actions',
+  ];
   readonly products = signal<Product[]>([]);
   readonly loading = signal(true);
   readonly loadFailed = signal(false);

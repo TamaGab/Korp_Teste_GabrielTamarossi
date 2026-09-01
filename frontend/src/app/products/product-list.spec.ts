@@ -31,6 +31,7 @@ describe('ProductList', () => {
     await fixture.whenStable();
 
     const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('tbody .mat-column-id')?.textContent).toContain('1');
     expect(page.textContent).toContain('LAP01');
     expect(page.textContent).toContain('Laptop');
     expect(page.textContent).toContain('7');
@@ -290,15 +291,11 @@ describe('ProductList', () => {
     expect(rows()[0].textContent).toContain('LAP01');
 
     const sortHeaders = fixture.nativeElement.querySelectorAll('.mat-sort-header');
-    expect(sortHeaders).toHaveLength(5);
-
-    (sortHeaders[1] as HTMLElement).click();
-    fixture.detectChanges();
-    expect(rows()[0].textContent).toContain('MON02');
+    expect(sortHeaders).toHaveLength(6);
 
     (sortHeaders[2] as HTMLElement).click();
     fixture.detectChanges();
-    expect(rows()[0].textContent).toContain('LAP01');
+    expect(rows()[0].textContent).toContain('MON02');
 
     (sortHeaders[3] as HTMLElement).click();
     fixture.detectChanges();
@@ -306,11 +303,19 @@ describe('ProductList', () => {
 
     (sortHeaders[4] as HTMLElement).click();
     fixture.detectChanges();
+    expect(rows()[0].textContent).toContain('LAP01');
+
+    (sortHeaders[5] as HTMLElement).click();
+    fixture.detectChanges();
     expect(rows()[0].textContent).toContain('MON02');
 
-    (sortHeaders[0] as HTMLElement).click();
+    (sortHeaders[1] as HTMLElement).click();
     fixture.detectChanges();
     expect(rows()[0].textContent).toContain('LAP01');
+
+    (sortHeaders[1] as HTMLElement).click();
+    fixture.detectChanges();
+    expect(rows()[0].textContent).toContain('MON02');
 
     (sortHeaders[0] as HTMLElement).click();
     fixture.detectChanges();

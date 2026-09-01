@@ -1,11 +1,12 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
+import { INVENTORY_API_URL } from '../api-config';
 import { CreateProduct, Product } from './product';
 
 @Injectable({ providedIn: 'root' })
 export class ProductApi {
   private readonly http = inject(HttpClient);
-  private readonly productsUrl = 'http://localhost:8081/products';
+  private readonly productsUrl = `${inject(INVENTORY_API_URL)}/products`;
 
   list() {
     return this.http.get<Product[]>(this.productsUrl);
