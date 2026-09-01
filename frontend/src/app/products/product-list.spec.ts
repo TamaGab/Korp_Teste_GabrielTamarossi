@@ -38,6 +38,31 @@ describe('ProductList', () => {
     http.verify();
   });
 
+  it('offers editing for each Product', () => {
+    const fixture = TestBed.createComponent(ProductList);
+    fixture.detectChanges();
+
+    TestBed.inject(HttpTestingController)
+      .expectOne('http://localhost:8081/products')
+      .flush([
+        {
+          id: 7,
+          code: 'LAP01',
+          description: 'Laptop',
+          stock: 7,
+          createdAt: '2026-08-31T15:00:00Z',
+          updatedAt: '2026-08-31T15:00:00Z',
+        },
+      ]);
+    fixture.detectChanges();
+
+    const editLink = fixture.nativeElement.querySelector(
+      'a[href="/products/7/edit"]',
+    ) as HTMLAnchorElement;
+    expect(editLink).not.toBeNull();
+    expect(editLink.textContent).toContain('Editar');
+  });
+
   it('searches Products by Product Code or Description', async () => {
     const fixture = TestBed.createComponent(ProductList);
     fixture.detectChanges();
@@ -205,7 +230,7 @@ describe('ProductList', () => {
     expect(rows()).toHaveLength(10);
 
     const pageSize = fixture.nativeElement.querySelector(
-      'select[aria-label="Products por página"]',
+      'select[aria-label="Produtos por página"]',
     ) as HTMLSelectElement;
     expect(Array.from(pageSize.options).map((option) => option.value)).toEqual(['10', '25', '50']);
 

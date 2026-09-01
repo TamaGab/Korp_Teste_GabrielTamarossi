@@ -33,7 +33,7 @@ type SortColumn = 'code' | 'description' | 'stock' | 'createdAt' | 'updatedAt';
 export class ProductList implements OnInit {
   private readonly productApi = inject(ProductApi);
 
-  readonly displayedColumns = ['code', 'description', 'stock', 'createdAt', 'updatedAt'];
+  readonly displayedColumns = ['code', 'description', 'stock', 'createdAt', 'updatedAt', 'actions'];
   readonly products = signal<Product[]>([]);
   readonly loading = signal(true);
   readonly loadFailed = signal(false);

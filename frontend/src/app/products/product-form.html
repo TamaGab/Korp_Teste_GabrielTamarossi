@@ -1,8 +1,12 @@
 <header class="page-header">
-  <a mat-button routerLink="/products"><mat-icon>arrow_back</mat-icon>Products</a>
-  <p class="eyebrow">Inventory</p>
-  <h1>New Product</h1>
-  <p class="subtitle">Register a Product before using it in an invoice.</p>
+  <a mat-button routerLink="/products"><mat-icon>arrow_back</mat-icon>Produtos</a>
+  <p class="eyebrow">Estoque</p>
+  <h1>{{ editing ? 'Editar produto' : 'Novo produto' }}</h1>
+  @if (editing) {
+    <p class="subtitle">Atualize os dados do produto.</p>
+  } @else {
+    <p class="subtitle">Cadastre um produto antes de usá-lo em uma fatura.</p>
+  }
 </header>
 
 <mat-card appearance="outlined">
@@ -10,52 +14,55 @@
     @if (generalError()) {
       <div class="alert" role="alert">{{ generalError() }}</div>
     }
+    @if (loading()) {
+      <div class="state">Carregando produto...</div>
+    } @else if (!loadFailed()) {
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        <mat-form-field appearance="outline">
+          <mat-label>Código do produto</mat-label>
+          <input
+            matInput
+            formControlName="code"
+            maxlength="5"
+            autocomplete="off"
+            placeholder="AAA00"
+            (input)="uppercaseCode()"
+          />
+          <mat-hint>Três letras seguidas de dois números</mat-hint>
+          @if (form.controls.code.hasError('exhausted')) {
+            <mat-error>
+              Todos os códigos deste prefixo estão em uso. Altere o prefixo manualmente.
+            </mat-error>
+          } @else if (form.controls.code.hasError('duplicate')) {
+            <mat-error>Este código já está cadastrado.</mat-error>
+          } @else if (form.controls.code.touched && form.controls.code.invalid) {
+            <mat-error>Use o formato AAA00</mat-error>
+          }
+        </mat-form-field>
 
-    <form [formGroup]="form" (ngSubmit)="submit()">
-      <mat-form-field appearance="outline">
-        <mat-label>Product Code</mat-label>
-        <input
-          matInput
-          formControlName="code"
-          maxlength="5"
-          autocomplete="off"
-          placeholder="AAA00"
-          (input)="uppercaseCode()"
-        />
-        <mat-hint>Three letters followed by two numbers</mat-hint>
-        @if (form.controls.code.hasError('exhausted')) {
-          <mat-error>
-            Todos os códigos deste prefixo estão em uso. Altere o prefixo manualmente.
-          </mat-error>
-        } @else if (form.controls.code.hasError('duplicate')) {
-          <mat-error>Este código já está cadastrado.</mat-error>
-        } @else if (form.controls.code.touched && form.controls.code.invalid) {
-          <mat-error>Use o formato AAA00</mat-error>
-        }
-      </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Descrição</mat-label>
+          <input matInput formControlName="description" maxlength="200" />
+          @if (form.controls.description.touched && form.controls.description.invalid) {
+            <mat-error>A descrição é obrigatória e pode ter até 200 caracteres</mat-error>
+          }
+        </mat-form-field>
 
-      <mat-form-field appearance="outline">
-        <mat-label>Description</mat-label>
-        <input matInput formControlName="description" maxlength="200" />
-        @if (form.controls.description.touched && form.controls.description.invalid) {
-          <mat-error>Description is required and can contain up to 200 characters</mat-error>
-        }
-      </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Estoque disponível</mat-label>
+          <input matInput type="number" min="0" step="1" formControlName="stock" />
+          @if (form.controls.stock.touched && form.controls.stock.invalid) {
+            <mat-error>O estoque disponível deve ser um número inteiro não negativo</mat-error>
+          }
+        </mat-form-field>
 
-      <mat-form-field appearance="outline">
-        <mat-label>Available Stock</mat-label>
-        <input matInput type="number" min="0" step="1" formControlName="stock" />
-        @if (form.controls.stock.touched && form.controls.stock.invalid) {
-          <mat-error>Available Stock must be a non-negative whole number</mat-error>
-        }
-      </mat-form-field>
-
-      <div class="actions">
-        <a mat-button routerLink="/products">Cancel</a>
-        <button mat-flat-button type="submit" [disabled]="submitting()">
-          {{ submitting() ? 'Saving...' : 'Create Product' }}
-        </button>
-      </div>
-    </form>
+        <div class="actions">
+          <a mat-button routerLink="/products">Cancelar</a>
+          <button mat-flat-button type="submit" [disabled]="submitting()">
+            {{ submitting() ? 'Salvando...' : editing ? 'Salvar alterações' : 'Cadastrar produto' }}
+          </button>
+        </div>
+      </form>
+    }
   </mat-card-content>
 </mat-card>

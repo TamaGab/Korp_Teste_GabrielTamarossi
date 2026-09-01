@@ -8,7 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ProductApi } from './product-api';
 
 @Component({
@@ -28,11 +28,17 @@ import { ProductApi } from './product-api';
 export class ProductForm {
   private readonly productApi = inject(ProductApi);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly submitting = signal(false);
+  readonly loading = signal(false);
+  readonly loadFailed = signal(false);
   readonly generalError = signal('');
+  private readonly routeProductId = this.route.snapshot.paramMap.get('id');
+  readonly productId = this.readProductId(this.routeProductId);
+  readonly editing = this.routeProductId !== null;
   private existingCodes = new Set<string>();
   private codeManuallyEdited = false;
   readonly form = new FormGroup({
@@ -51,12 +57,39 @@ export class ProductForm {
   });
 
   constructor() {
-    this.productApi.list().subscribe({
-      next: (products) => {
-        this.existingCodes = new Set(products.map((product) => product.code));
-        this.suggestCode();
-      },
-    });
+    if (!this.editing) {
+      this.productApi.list().subscribe({
+        next: (products) => {
+          this.existingCodes = new Set(products.map((product) => product.code));
+          this.suggestCode();
+        },
+      });
+    } else if (this.productId === null) {
+      this.loadFailed.set(true);
+      this.generalError.set('Produto não encontrado.');
+    } else {
+      this.loading.set(true);
+      this.productApi.get(this.productId).subscribe({
+        next: (product) => {
+          this.codeManuallyEdited = true;
+          this.form.setValue({
+            code: product.code,
+            description: product.description,
+            stock: product.stock,
+          });
+          this.loading.set(false);
+        },
+        error: (error: HttpErrorResponse) => {
+          this.loading.set(false);
+          this.loadFailed.set(true);
+          this.generalError.set(
+            error.status === 404
+              ? 'Produto não encontrado.'
+              : 'Não foi possível carregar o produto. Tente novamente.',
+          );
+        },
+      });
+    }
     this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.generalError.set('');
     });
@@ -92,11 +125,22 @@ export class ProductForm {
     this.submitting.set(true);
     this.generalError.set('');
 
-    this.productApi.create(product).subscribe({
+    if (this.editing && this.productId === null) {
+      return;
+    }
+    const save =
+      this.editing && this.productId !== null
+        ? this.productApi.update(this.productId, product)
+        : this.productApi.create(product);
+    save.subscribe({
       next: () => {
-        this.snackBar.open('Product created successfully', 'Close', {
-          duration: 4000,
-        });
+        this.snackBar.open(
+          this.editing ? 'Produto atualizado com sucesso' : 'Produto cadastrado com sucesso',
+          'Fechar',
+          {
+            duration: 4000,
+          },
+        );
         void this.router.navigate(['/products']);
       },
       error: (error: HttpErrorResponse) => {
@@ -106,9 +150,18 @@ export class ProductForm {
           this.form.controls.code.markAsTouched();
           return;
         }
-        this.generalError.set(error.error?.error || 'Product could not be created. Try again.');
+        this.generalError.set(
+          this.editing
+            ? 'Não foi possível atualizar o produto. Tente novamente.'
+            : 'Não foi possível cadastrar o produto. Tente novamente.',
+        );
       },
     });
+  }
+
+  private readProductId(value: string | null) {
+    const id = Number(value);
+    return Number.isInteger(id) && id > 0 ? id : null;
   }
 
   private clearDuplicateError() {

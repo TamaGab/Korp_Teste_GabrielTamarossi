@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ type Product struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
-type createProductRequest struct {
+type productRequest struct {
 	Code        string `json:"code"`
 	Description string `json:"description"`
 	Stock       *int   `json:"stock"`
@@ -38,17 +39,104 @@ func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool) {
 	h := handler{pool: pool}
 	router.POST("/products", h.create)
 	router.GET("/products", h.list)
+	router.GET("/products/:id", h.get)
+	router.PUT("/products/:id", h.update)
+}
+
+func (h handler) get(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
+
+	var found Product
+	err = h.pool.QueryRow(c.Request.Context(), `
+		SELECT id, code, description, stock, created_at, updated_at
+		FROM products
+		WHERE id = $1
+	`, id).Scan(
+		&found.ID,
+		&found.Code,
+		&found.Description,
+		&found.Stock,
+		&found.CreatedAt,
+		&found.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not get product"})
+		return
+	}
+
+	found.CreatedAt = found.CreatedAt.UTC()
+	found.UpdatedAt = found.UpdatedAt.UTC()
+	c.JSON(http.StatusOK, found)
+}
+
+func (h handler) update(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
+
+	var request productRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	request.Description = strings.TrimSpace(request.Description)
+	if message := validateProduct(request); message != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": message})
+		return
+	}
+
+	var updated Product
+	err = h.pool.QueryRow(c.Request.Context(), `
+		UPDATE products
+		SET code = $1, description = $2, stock = $3, updated_at = clock_timestamp()
+		WHERE id = $4
+		RETURNING id, code, description, stock, created_at, updated_at
+	`, request.Code, request.Description, *request.Stock, id).Scan(
+		&updated.ID,
+		&updated.Code,
+		&updated.Description,
+		&updated.Stock,
+		&updated.CreatedAt,
+		&updated.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
+	if err != nil {
+		var postgresError *pgconn.PgError
+		if errors.As(err, &postgresError) && postgresError.Code == "23505" {
+			c.JSON(http.StatusConflict, gin.H{"error": "product code already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not update product"})
+		return
+	}
+
+	updated.CreatedAt = updated.CreatedAt.UTC()
+	updated.UpdatedAt = updated.UpdatedAt.UTC()
+	c.JSON(http.StatusOK, updated)
 }
 
 func (h handler) create(c *gin.Context) {
-	var request createProductRequest
+	var request productRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
 	request.Description = strings.TrimSpace(request.Description)
-	if message := validateCreate(request); message != "" {
+	if message := validateProduct(request); message != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": message})
 		return
 	}
@@ -115,7 +203,7 @@ func (h handler) list(c *gin.Context) {
 	c.JSON(http.StatusOK, products)
 }
 
-func validateCreate(request createProductRequest) string {
+func validateProduct(request productRequest) string {
 	if !codePattern.MatchString(request.Code) {
 		return "code must match AAA00"
 	}

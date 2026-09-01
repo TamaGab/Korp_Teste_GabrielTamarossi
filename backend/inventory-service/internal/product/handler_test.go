@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,6 +47,115 @@ func TestUserCanCreateAndListProduct(t *testing.T) {
 	decodeResponse(t, listResponse, &products)
 	if len(products) != 1 || products[0].ID != created.ID {
 		t.Fatalf("GET /products body = %+v, want created Product", products)
+	}
+}
+
+func TestUserCanGetProductByID(t *testing.T) {
+	router := newTestRouter(t)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":7}`)
+	var created product.Product
+	decodeResponse(t, createResponse, &created)
+
+	response := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", created.ID), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /products/:id status = %d, want %d; body = %s", response.Code, http.StatusOK, response.Body.String())
+	}
+
+	var found product.Product
+	decodeResponse(t, response, &found)
+	if found != created {
+		t.Fatalf("GET /products/:id body = %+v, want %+v", found, created)
+	}
+}
+
+func TestGetProductReturnsNotFound(t *testing.T) {
+	response := performRequest(newTestRouter(t), http.MethodGet, "/products/999", "")
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("GET /products/:id status = %d, want %d; body = %s", response.Code, http.StatusNotFound, response.Body.String())
+	}
+
+	var body map[string]string
+	decodeResponse(t, response, &body)
+	if body["error"] != "product not found" || len(body) != 1 {
+		t.Fatalf("GET /products/:id error = %#v, want {error: product not found}", body)
+	}
+}
+
+func TestUserCanUpdateProductWithoutChangingItsIdentity(t *testing.T) {
+	router := newTestRouter(t)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":7}`)
+	var created product.Product
+	decodeResponse(t, createResponse, &created)
+
+	response := performRequest(router, http.MethodPut, fmt.Sprintf("/products/%d", created.ID), `{"code":"NOT02","description":"Notebook","stock":4}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("PUT /products/:id status = %d, want %d; body = %s", response.Code, http.StatusOK, response.Body.String())
+	}
+
+	var updated product.Product
+	decodeResponse(t, response, &updated)
+	if updated.ID != created.ID || updated.CreatedAt != created.CreatedAt {
+		t.Fatalf("PUT /products/:id identity = %d / %v, want %d / %v", updated.ID, updated.CreatedAt, created.ID, created.CreatedAt)
+	}
+	if updated.Code != "NOT02" || updated.Description != "Notebook" || updated.Stock != 4 {
+		t.Fatalf("PUT /products/:id body = %+v, want updated Product", updated)
+	}
+	if !updated.UpdatedAt.After(created.UpdatedAt) {
+		t.Fatalf("PUT /products/:id updatedAt = %v, want after %v", updated.UpdatedAt, created.UpdatedAt)
+	}
+
+	getResponse := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", created.ID), "")
+	var persisted product.Product
+	decodeResponse(t, getResponse, &persisted)
+	if persisted != updated {
+		t.Fatalf("GET after PUT body = %+v, want %+v", persisted, updated)
+	}
+
+	secondResponse := performRequest(router, http.MethodPut, fmt.Sprintf("/products/%d", created.ID), `{"code":"NOT02","description":"Notebook","stock":4}`)
+	var updatedAgain product.Product
+	decodeResponse(t, secondResponse, &updatedAgain)
+	if !updatedAgain.UpdatedAt.After(updated.UpdatedAt) {
+		t.Fatalf("second PUT updatedAt = %v, want after %v", updatedAgain.UpdatedAt, updated.UpdatedAt)
+	}
+}
+
+func TestUpdateProductRejectsInvalidInput(t *testing.T) {
+	router := newTestRouter(t)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":7}`)
+	var created product.Product
+	decodeResponse(t, createResponse, &created)
+
+	tests := []string{
+		`{"code":"lap01","description":"Laptop","stock":1}`,
+		`{"code":"LAP01","description":"   ","stock":1}`,
+		`{"code":"LAP01","description":"Laptop","stock":-1}`,
+		`{"code":"LAP01","description":"Laptop","stock":1.5}`,
+	}
+	for _, body := range tests {
+		response := performRequest(router, http.MethodPut, fmt.Sprintf("/products/%d", created.ID), body)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("PUT /products/:id status = %d, want %d; body = %s", response.Code, http.StatusBadRequest, response.Body.String())
+		}
+	}
+}
+
+func TestUpdateProductReturnsNotFound(t *testing.T) {
+	response := performRequest(newTestRouter(t), http.MethodPut, "/products/999", `{"code":"LAP01","description":"Laptop","stock":7}`)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("PUT /products/:id status = %d, want %d; body = %s", response.Code, http.StatusNotFound, response.Body.String())
+	}
+}
+
+func TestUpdateProductRejectsDuplicateCode(t *testing.T) {
+	router := newTestRouter(t)
+	performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":7}`)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"MON01","description":"Monitor","stock":3}`)
+	var monitor product.Product
+	decodeResponse(t, createResponse, &monitor)
+
+	response := performRequest(router, http.MethodPut, fmt.Sprintf("/products/%d", monitor.ID), `{"code":"LAP01","description":"Monitor","stock":3}`)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("PUT /products/:id status = %d, want %d; body = %s", response.Code, http.StatusConflict, response.Body.String())
 	}
 }
 

@@ -11,7 +11,15 @@ export class ProductApi {
     return this.http.get<Product[]>(this.productsUrl);
   }
 
+  get(id: number) {
+    return this.http.get<Product>(`${this.productsUrl}/${id}`);
+  }
+
   create(product: CreateProduct) {
     return this.http.post<Product>(this.productsUrl, product);
+  }
+
+  update(id: number, product: CreateProduct) {
+    return this.http.put<Product>(`${this.productsUrl}/${id}`, product);
   }
 }
