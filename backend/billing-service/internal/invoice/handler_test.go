@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/TamaGab/Korp_Teste_GabrielTamarossi/backend/billing-service/internal/database"
@@ -256,6 +257,131 @@ func TestCreateInvoiceReturnsBadGatewayWhenInventoryFails(t *testing.T) {
 	decodeResponse(t, response, &body)
 	if body["error"] != "could not validate products" {
 		t.Fatalf("POST /invoices inventory failure error = %q, want could not validate products", body["error"])
+	}
+}
+
+func TestUserCanPreparePrintableHTMLForAnEligibleInvoice(t *testing.T) {
+	var validationBody map[string]any
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/products" {
+			response.Header().Set("Content-Type", "application/json")
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"<Laptop> & Cia","stock":2}]`))
+			return
+		}
+		if request.URL.Path != "/stock/validate" || request.Method != http.MethodPost {
+			http.NotFound(response, request)
+			return
+		}
+		if err := json.NewDecoder(request.Body).Decode(&validationBody); err != nil {
+			t.Errorf("decode inventory validation request: %v", err)
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"problems":[]}`))
+	}))
+	t.Cleanup(inventory.Close)
+	router := newTestRouter(t, inventory.URL)
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":2}]}`)
+
+	response := performRequest(router, http.MethodPost, "/invoices/0001/prepare-print", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("POST /invoices/0001/prepare-print status = %d, want 200; body = %s", response.Code, response.Body.String())
+	}
+	var prepared struct {
+		HTML string `json:"html"`
+	}
+	decodeResponse(t, response, &prepared)
+	for _, expected := range []string{"Nota Fiscal", "0001", "LAP01", "&lt;Laptop&gt; &amp; Cia", "2"} {
+		if !strings.Contains(prepared.HTML, expected) {
+			t.Fatalf("print HTML %q does not contain %q", prepared.HTML, expected)
+		}
+	}
+	for _, forbidden := range []string{"OPEN", "Aberta", "createdAt", "Cliente", "Data", "Valor", "Imposto", "Total", "R$"} {
+		if strings.Contains(prepared.HTML, forbidden) {
+			t.Fatalf("print HTML contains forbidden content %q: %s", forbidden, prepared.HTML)
+		}
+	}
+	lines := validationBody["lines"].([]any)
+	line := lines[0].(map[string]any)
+	if line["inventoryProductId"] != float64(1) || line["quantity"] != float64(2) {
+		t.Fatalf("inventory validation body = %#v, want persisted Product identity and quantity", validationBody)
+	}
+}
+
+func TestPreparingPrintReturnsEveryStockProblemWithProductCodes(t *testing.T) {
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/products" {
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"Laptop"},{"id":2,"code":"MON01","description":"Monitor"}]`))
+			return
+		}
+		response.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = response.Write([]byte(`{"problems":[{"inventoryProductId":1,"reason":"insufficient_stock","availableStock":1,"requestedQuantity":2},{"inventoryProductId":2,"reason":"product_not_found","requestedQuantity":1}]}`))
+	}))
+	t.Cleanup(inventory.Close)
+	router := newTestRouter(t, inventory.URL)
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":2},{"productCode":"MON01","quantity":1}]}`)
+
+	response := performRequest(router, http.MethodPost, "/invoices/0001/prepare-print", "")
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST prepare-print status = %d, want 422; body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Problems []struct {
+			ProductCode string `json:"productCode"`
+			Reason      string `json:"reason"`
+		} `json:"problems"`
+	}
+	decodeResponse(t, response, &body)
+	if len(body.Problems) != 2 || body.Problems[0].ProductCode != "LAP01" || body.Problems[0].Reason != "insufficient_stock" || body.Problems[1].ProductCode != "MON01" || body.Problems[1].Reason != "product_not_found" {
+		t.Fatalf("prepare-print problems = %+v, want both Product Codes and reasons", body.Problems)
+	}
+}
+
+func TestPreparingPrintRejectsClosedAndPendingInvoices(t *testing.T) {
+	inventory := newInventoryServer(t, map[string]string{
+		"/products":       `[{"id":1,"code":"LAP01","description":"Laptop"}]`,
+		"/stock/validate": `{"problems":[]}`,
+	})
+	router, pool := newTestRouterWithPool(t, inventory.URL)
+	body := `{"lines":[{"productCode":"LAP01","quantity":1}]}`
+	performRequest(router, http.MethodPost, "/invoices", body)
+	performRequest(router, http.MethodPost, "/invoices", body)
+	if _, err := pool.Exec(context.Background(), "UPDATE invoices SET status = 'CLOSED' WHERE number = 1"); err != nil {
+		t.Fatalf("close Invoice fixture: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), "UPDATE invoices SET closing_pending = TRUE WHERE number = 2"); err != nil {
+		t.Fatalf("mark pending Invoice fixture: %v", err)
+	}
+
+	for _, number := range []string{"0001", "0002"} {
+		response := performRequest(router, http.MethodPost, "/invoices/"+number+"/prepare-print", "")
+		if response.Code != http.StatusConflict {
+			t.Fatalf("POST prepare-print for Invoice %s status = %d, want 409; body = %s", number, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestPreparingPrintKeepsOpenInvoiceWhenInventoryIsUnavailable(t *testing.T) {
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/products" {
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"Laptop"}]`))
+			return
+		}
+		http.Error(response, "unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(inventory.Close)
+	router := newTestRouter(t, inventory.URL)
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":1}]}`)
+
+	response := performRequest(router, http.MethodPost, "/invoices/0001/prepare-print", "")
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("POST prepare-print status = %d, want 502; body = %s", response.Code, response.Body.String())
+	}
+	getResponse := performRequest(router, http.MethodGet, "/invoices/0001", "")
+	var current invoice.Invoice
+	decodeResponse(t, getResponse, &current)
+	if current.Status != "OPEN" {
+		t.Fatalf("Invoice status after unavailable inventory = %q, want OPEN", current.Status)
 	}
 }
 

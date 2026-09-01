@@ -1,6 +1,11 @@
 import { HttpClient } from "@angular/common/http";
 import { Injectable, inject } from "@angular/core";
-import { CreateInvoice, Invoice, InvoiceSummary } from "./invoice";
+import {
+  CreateInvoice,
+  Invoice,
+  InvoiceSummary,
+  PreparedInvoicePrint,
+} from "./invoice";
 
 @Injectable({ providedIn: "root" })
 export class InvoiceApi {
@@ -17,5 +22,12 @@ export class InvoiceApi {
 
   get(number: string) {
     return this.http.get<Invoice>(`${this.invoicesUrl}/${number}`);
+  }
+
+  preparePrint(number: string) {
+    return this.http.post<PreparedInvoicePrint>(
+      `${this.invoicesUrl}/${number}/prepare-print`,
+      {},
+    );
   }
 }

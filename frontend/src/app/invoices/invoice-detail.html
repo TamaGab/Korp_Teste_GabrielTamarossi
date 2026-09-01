@@ -15,8 +15,28 @@
       Cadastrada em {{ current.createdAt | date: 'dd/MM/yyyy HH:mm' }}
     </p>
   </div>
-  <span class="status">{{ statusLabel(current.status) }}</span>
+  <div class="header-actions">
+    <span class="status">{{ statusLabel(current.status) }}</span>
+    @if (current.status === 'OPEN') {
+    <button
+      mat-flat-button
+      type="button"
+      [disabled]="preparingPrint()"
+      (click)="preparePrint()"
+    >
+      {{ preparingPrint() ? 'Verificando estoque...' : 'Imprimir' }}
+    </button>
+    }
+  </div>
 </header>
+
+@if (printErrorMessages().length > 0) {
+<div class="print-errors" role="alert">
+  @for (message of printErrorMessages(); track message) {
+  <p>{{ message }}</p>
+  }
+</div>
+}
 
 <section aria-labelledby="invoice-lines-title">
   <h2 id="invoice-lines-title">Produtos</h2>

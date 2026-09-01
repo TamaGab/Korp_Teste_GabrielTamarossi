@@ -22,6 +22,17 @@ export interface CreateInvoiceLine {
   quantity: number;
 }
 
+export interface PreparedInvoicePrint {
+  html: string;
+}
+
+export interface PrintPreparationProblem {
+  productCode: string;
+  reason: "product_not_found" | "insufficient_stock";
+  availableStock?: number;
+  requestedQuantity: number;
+}
+
 export function invoiceStatusLabel(status: Invoice["status"]) {
   return status === "OPEN" ? "Aberta" : "Fechada";
 }

@@ -5,8 +5,13 @@ import { MatButtonModule } from "@angular/material/button";
 import { MatProgressSpinnerModule } from "@angular/material/progress-spinner";
 import { MatTableModule } from "@angular/material/table";
 import { ActivatedRoute, RouterLink } from "@angular/router";
+import { finalize } from "rxjs";
 import { InvoiceApi } from "./invoice-api";
-import { Invoice, invoiceStatusLabel } from "./invoice";
+import {
+  Invoice,
+  PrintPreparationProblem,
+  invoiceStatusLabel,
+} from "./invoice";
 
 @Component({
   selector: "app-invoice-detail",
@@ -27,6 +32,8 @@ export class InvoiceDetail implements OnInit {
   readonly invoice = signal<Invoice | null>(null);
   readonly loading = signal(true);
   readonly errorMessage = signal("");
+  readonly printErrorMessages = signal<string[]>([]);
+  readonly preparingPrint = signal(false);
   readonly statusLabel = invoiceStatusLabel;
   readonly displayedColumns = ["code", "description", "quantity"];
 
@@ -46,5 +53,66 @@ export class InvoiceDetail implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  preparePrint() {
+    const current = this.invoice();
+    if (!current || current.status !== "OPEN" || this.preparingPrint()) {
+      return;
+    }
+
+    this.preparingPrint.set(true);
+    this.printErrorMessages.set([]);
+    this.invoiceApi
+      .preparePrint(current.number)
+      .pipe(finalize(() => this.preparingPrint.set(false)))
+      .subscribe({
+        next: (prepared) => {
+          const printFrame = document.createElement("iframe");
+          printFrame.setAttribute("aria-hidden", "true");
+          printFrame.style.height = "0";
+          printFrame.style.position = "fixed";
+          printFrame.style.width = "0";
+          document.body.appendChild(printFrame);
+
+          const printWindow = printFrame.contentWindow;
+          if (!printWindow) {
+            printFrame.remove();
+            this.printErrorMessages.set([
+              "Não foi possível abrir a impressão. Tente novamente.",
+            ]);
+            return;
+          }
+          printWindow.addEventListener("afterprint", () => printFrame.remove(), {
+            once: true,
+          });
+          printWindow.document.open();
+          printWindow.document.write(prepared.html);
+          printWindow.document.close();
+          printWindow.focus();
+          printWindow.print();
+        },
+        error: (error: HttpErrorResponse) => {
+          const problems = error.error?.problems;
+          if (error.status === 422 && Array.isArray(problems)) {
+            this.printErrorMessages.set(
+              problems.map((problem: PrintPreparationProblem) =>
+                this.stockProblemMessage(problem),
+              ),
+            );
+            return;
+          }
+          this.printErrorMessages.set([
+            "Não foi possível verificar o estoque. Tente novamente.",
+          ]);
+        },
+      });
+  }
+
+  private stockProblemMessage(problem: PrintPreparationProblem) {
+    if (problem.reason === "product_not_found") {
+      return `O produto ${problem.productCode} não está mais disponível no estoque.`;
+    }
+    return `Estoque insuficiente para ${problem.productCode}: disponível ${problem.availableStock}, necessário ${problem.requestedQuantity}.`;
   }
 }

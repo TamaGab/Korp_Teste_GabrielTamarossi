@@ -47,6 +47,25 @@ h2 {
   padding: 0.5rem 0.8rem;
 }
 
+.header-actions {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+}
+
+.print-errors {
+  background: #fff1ef;
+  border: 1px solid #e7aaa3;
+  border-radius: 0.75rem;
+  color: #a72b1f;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+}
+
+.print-errors p + p {
+  margin-top: 0.5rem;
+}
+
 .table-container,
 .state {
   background: var(--surface);
@@ -82,6 +101,11 @@ table {
 
 @media (max-width: 640px) {
   .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-actions {
     align-items: flex-start;
     flex-direction: column;
   }

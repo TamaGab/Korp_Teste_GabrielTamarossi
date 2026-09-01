@@ -31,6 +31,22 @@ type productRequest struct {
 	Stock       *int   `json:"stock"`
 }
 
+type stockValidationRequest struct {
+	Lines []stockValidationLine `json:"lines"`
+}
+
+type stockValidationLine struct {
+	InventoryProductID int `json:"inventoryProductId"`
+	Quantity           int `json:"quantity"`
+}
+
+type stockProblem struct {
+	InventoryProductID int    `json:"inventoryProductId"`
+	Reason             string `json:"reason"`
+	AvailableStock     *int   `json:"availableStock,omitempty"`
+	RequestedQuantity  int    `json:"requestedQuantity"`
+}
+
 type handler struct {
 	pool *pgxpool.Pool
 }
@@ -42,6 +58,89 @@ func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool) {
 	router.GET("/products/:id", h.get)
 	router.PUT("/products/:id", h.update)
 	router.DELETE("/products/:id", h.delete)
+	router.POST("/stock/validate", h.validateStock)
+}
+
+func (h handler) validateStock(c *gin.Context) {
+	var request stockValidationRequest
+	if err := c.ShouldBindJSON(&request); err != nil || !validStockValidation(request) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	productIDs := make([]int, len(request.Lines))
+	for index, line := range request.Lines {
+		productIDs[index] = line.InventoryProductID
+	}
+	rows, err := h.pool.Query(c.Request.Context(), `
+		SELECT id, stock
+		FROM products
+		WHERE id = ANY($1)
+	`, productIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not validate stock"})
+		return
+	}
+	defer rows.Close()
+
+	stockByProductID := make(map[int]int, len(request.Lines))
+	for rows.Next() {
+		var productID int
+		var stock int
+		if err := rows.Scan(&productID, &stock); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not validate stock"})
+			return
+		}
+		stockByProductID[productID] = stock
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not validate stock"})
+		return
+	}
+
+	problems := make([]stockProblem, 0)
+	for _, line := range request.Lines {
+		availableStock, exists := stockByProductID[line.InventoryProductID]
+		if !exists {
+			problems = append(problems, stockProblem{
+				InventoryProductID: line.InventoryProductID,
+				Reason:             "product_not_found",
+				RequestedQuantity:  line.Quantity,
+			})
+			continue
+		}
+		if availableStock < line.Quantity {
+			problems = append(problems, stockProblem{
+				InventoryProductID: line.InventoryProductID,
+				Reason:             "insufficient_stock",
+				AvailableStock:     &availableStock,
+				RequestedQuantity:  line.Quantity,
+			})
+		}
+	}
+
+	status := http.StatusOK
+	if len(problems) > 0 {
+		status = http.StatusUnprocessableEntity
+	}
+	c.JSON(status, gin.H{"problems": problems})
+}
+
+func validStockValidation(request stockValidationRequest) bool {
+	if len(request.Lines) == 0 {
+		return false
+	}
+	seen := make(map[int]struct{}, len(request.Lines))
+	for _, line := range request.Lines {
+		if line.InventoryProductID <= 0 || line.Quantity <= 0 {
+			return false
+		}
+		if _, exists := seen[line.InventoryProductID]; exists {
+			return false
+		}
+		seen[line.InventoryProductID] = struct{}{}
+	}
+	return true
 }
 
 func (h handler) delete(c *gin.Context) {

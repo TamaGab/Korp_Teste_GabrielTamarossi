@@ -272,6 +272,82 @@ func TestConcurrentCreateProductAllowsOnlyOneProductCode(t *testing.T) {
 	}
 }
 
+func TestStockValidationReturnsEveryBlockingProductWithoutChangingStock(t *testing.T) {
+	router := newTestRouter(t)
+	firstResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":2}`)
+	secondResponse := performRequest(router, http.MethodPost, "/products", `{"code":"MON01","description":"Monitor","stock":1}`)
+	var laptop product.Product
+	var monitor product.Product
+	decodeResponse(t, firstResponse, &laptop)
+	decodeResponse(t, secondResponse, &monitor)
+
+	response := performRequest(router, http.MethodPost, "/stock/validate", fmt.Sprintf(`{
+		"lines":[
+			{"inventoryProductId":%d,"quantity":3},
+			{"inventoryProductId":9999,"quantity":1},
+			{"inventoryProductId":%d,"quantity":2}
+		]
+	}`, laptop.ID, monitor.ID))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /stock/validate status = %d, want 422; body = %s", response.Code, response.Body.String())
+	}
+
+	var body struct {
+		Problems []struct {
+			InventoryProductID int    `json:"inventoryProductId"`
+			Reason             string `json:"reason"`
+			AvailableStock     *int   `json:"availableStock"`
+			RequestedAmount    int    `json:"requestedQuantity"`
+		} `json:"problems"`
+	}
+	decodeResponse(t, response, &body)
+	if len(body.Problems) != 3 {
+		t.Fatalf("POST /stock/validate problems = %+v, want all three blocking Products", body.Problems)
+	}
+	if body.Problems[0].InventoryProductID != laptop.ID || body.Problems[0].Reason != "insufficient_stock" || body.Problems[0].AvailableStock == nil || *body.Problems[0].AvailableStock != 2 || body.Problems[0].RequestedAmount != 3 {
+		t.Fatalf("first validation problem = %+v, want Laptop stock details", body.Problems[0])
+	}
+	if body.Problems[1].InventoryProductID != 9999 || body.Problems[1].Reason != "product_not_found" || body.Problems[1].AvailableStock != nil {
+		t.Fatalf("second validation problem = %+v, want missing Product", body.Problems[1])
+	}
+
+	for _, current := range []product.Product{laptop, monitor} {
+		getResponse := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", current.ID), "")
+		var afterValidation product.Product
+		decodeResponse(t, getResponse, &afterValidation)
+		if afterValidation.Stock != current.Stock {
+			t.Fatalf("Product %d stock after validation = %d, want unchanged %d", current.ID, afterValidation.Stock, current.Stock)
+		}
+	}
+}
+
+func TestStockValidationAcceptsEveryAvailableProduct(t *testing.T) {
+	router := newTestRouter(t)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":2}`)
+	var laptop product.Product
+	decodeResponse(t, createResponse, &laptop)
+
+	response := performRequest(router, http.MethodPost, "/stock/validate", fmt.Sprintf(`{"lines":[{"inventoryProductId":%d,"quantity":2}]}`, laptop.ID))
+	if response.Code != http.StatusOK || response.Body.String() != `{"problems":[]}` {
+		t.Fatalf("POST /stock/validate = %d / %s, want 200 with no problems", response.Code, response.Body.String())
+	}
+}
+
+func TestStockValidationRejectsInvalidInput(t *testing.T) {
+	for _, body := range []string{
+		`{}`,
+		`{"lines":[]}`,
+		`{"lines":[{"inventoryProductId":0,"quantity":1}]}`,
+		`{"lines":[{"inventoryProductId":1,"quantity":0}]}`,
+		`{"lines":[{"inventoryProductId":1,"quantity":1},{"inventoryProductId":1,"quantity":2}]}`,
+	} {
+		response := performRequest(newTestRouter(t), http.MethodPost, "/stock/validate", body)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("POST /stock/validate body %s status = %d, want 400", body, response.Code)
+		}
+	}
+}
+
 func TestDatabasePreservesProductInvariants(t *testing.T) {
 	pool := newTestPool(t)
 	tests := []struct {
