@@ -25,6 +25,10 @@ table {
   white-space: nowrap;
 }
 
+th.mat-column-status {
+  padding-left: calc(16px + 0.65rem);
+}
+
 .status {
   background: #eef1f4;
   border-radius: 999px;
