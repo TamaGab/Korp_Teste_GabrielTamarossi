@@ -41,9 +41,43 @@ h1 {
   overflow-x: auto;
 }
 
+.filters {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filters mat-form-field {
+  width: min(100%, 28rem);
+}
+
 table {
   background: transparent;
+  min-width: 52rem;
   width: 100%;
+}
+
+.pagination {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  gap: 1.25rem;
+  justify-content: flex-end;
+  padding: 1rem 0;
+}
+
+.pagination label {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pagination select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  color: inherit;
+  padding: 0.35rem;
 }
 
 .state {
@@ -68,5 +102,18 @@ table {
   .page-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-actions {
+    display: flex;
   }
 }

@@ -4,7 +4,9 @@
     <h1>Products</h1>
     <p class="subtitle">Products registered and ready for future invoices.</p>
   </div>
-  <a mat-flat-button routerLink="/products/new">New Product</a>
+  <button mat-flat-button type="button" routerLink="/products/new" [disabled]="loading()">
+    New Product
+  </button>
 </header>
 
 @if (loading()) {
@@ -12,36 +14,93 @@
 } @else if (loadFailed()) {
   <div class="state error" role="alert">Products could not be loaded. Try again later.</div>
 } @else if (products().length === 0) {
-  <div class="state">No Products registered yet.</div>
+  <div class="state">Nenhum produto cadastrado</div>
 } @else {
-  <div class="table-container">
-    <table mat-table [dataSource]="products()">
-      <ng-container matColumnDef="code">
-        <th mat-header-cell *matHeaderCellDef>Product Code</th>
-        <td mat-cell *matCellDef="let product">{{ product.code }}</td>
-      </ng-container>
-      <ng-container matColumnDef="description">
-        <th mat-header-cell *matHeaderCellDef>Description</th>
-        <td mat-cell *matCellDef="let product">{{ product.description }}</td>
-      </ng-container>
-      <ng-container matColumnDef="stock">
-        <th mat-header-cell *matHeaderCellDef>Available Stock</th>
-        <td mat-cell *matCellDef="let product">{{ product.stock }}</td>
-      </ng-container>
-      <ng-container matColumnDef="createdAt">
-        <th mat-header-cell *matHeaderCellDef>Created</th>
-        <td mat-cell *matCellDef="let product">
-          {{ product.createdAt | date: 'medium' }}
-        </td>
-      </ng-container>
-      <ng-container matColumnDef="updatedAt">
-        <th mat-header-cell *matHeaderCellDef>Updated</th>
-        <td mat-cell *matCellDef="let product">
-          {{ product.updatedAt | date: 'medium' }}
-        </td>
-      </ng-container>
-      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-    </table>
+  <div class="filters">
+    <mat-form-field appearance="outline">
+      <mat-label>Search Products</mat-label>
+      <input matInput [formControl]="searchControl" placeholder="Product Code or Description" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Available Stock</mat-label>
+      <select matNativeControl [formControl]="stockFilterControl">
+        <option value="all">Todos</option>
+        <option value="in-stock">Com estoque</option>
+        <option value="out-of-stock">Sem estoque</option>
+      </select>
+    </mat-form-field>
   </div>
+  @if (filteredProducts().length === 0) {
+    <div class="state">Nenhum produto encontrado</div>
+  } @else {
+    <div class="table-container">
+      <table
+        mat-table
+        matSort
+        matSortActive="code"
+        matSortDirection="asc"
+        matSortDisableClear
+        [dataSource]="pagedProducts()"
+        (matSortChange)="setSort($event)"
+      >
+        <ng-container matColumnDef="code">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Product Code</th>
+          <td mat-cell *matCellDef="let product">{{ product.code }}</td>
+        </ng-container>
+        <ng-container matColumnDef="description">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Description</th>
+          <td mat-cell *matCellDef="let product">{{ product.description }}</td>
+        </ng-container>
+        <ng-container matColumnDef="stock">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Available Stock</th>
+          <td mat-cell *matCellDef="let product">{{ product.stock }}</td>
+        </ng-container>
+        <ng-container matColumnDef="createdAt">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Created</th>
+          <td mat-cell *matCellDef="let product">
+            {{ product.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="updatedAt">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Updated</th>
+          <td mat-cell *matCellDef="let product">
+            {{ product.updatedAt | date: 'dd/MM/yyyy HH:mm' }}
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+    </div>
+    <div class="pagination" aria-label="Paginação de Products">
+      <label>
+        Products por página
+        <select aria-label="Products por página" [formControl]="pageSizeControl">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+        </select>
+      </label>
+      <span>Página {{ pageIndex() + 1 }} de {{ totalPages() }}</span>
+      <div class="page-actions">
+        <button
+          mat-button
+          type="button"
+          aria-label="Página anterior"
+          [disabled]="pageIndex() === 0"
+          (click)="previousPage()"
+        >
+          Anterior
+        </button>
+        <button
+          mat-button
+          type="button"
+          aria-label="Próxima página"
+          [disabled]="pageIndex() + 1 >= totalPages()"
+          (click)="nextPage()"
+        >
+          Próxima
+        </button>
+      </div>
+    </div>
+  }
 }
