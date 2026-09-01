@@ -145,12 +145,13 @@ func (h handler) close(c *gin.Context) {
 
 	var status string
 	var closingPending bool
+	var printPrepared bool
 	if err := transaction.QueryRow(c.Request.Context(), `
-		SELECT status, closing_pending
+		SELECT status, closing_pending, print_prepared
 		FROM invoices
 		WHERE number = $1
 		FOR UPDATE
-	`, number).Scan(&status, &closingPending); err != nil {
+	`, number).Scan(&status, &closingPending, &printPrepared); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
 			return
@@ -164,6 +165,10 @@ func (h handler) close(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"number": fmt.Sprintf("%04d", number), "status": "CLOSED"})
+		return
+	}
+	if !printPrepared && !closingPending {
+		c.JSON(http.StatusConflict, gin.H{"error": "invoice print was not prepared"})
 		return
 	}
 
@@ -194,7 +199,9 @@ func (h handler) close(c *gin.Context) {
 	}
 	if !closingPending {
 		if _, err := transaction.Exec(c.Request.Context(), `
-			UPDATE invoices SET closing_pending = TRUE WHERE number = $1
+			UPDATE invoices
+			SET closing_pending = TRUE, print_prepared = FALSE
+			WHERE number = $1
 		`, number); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not close invoice"})
 			return
@@ -269,7 +276,7 @@ func (h handler) preparePrint(c *gin.Context) {
 		SELECT status, closing_pending
 		FROM invoices
 		WHERE number = $1
-		FOR SHARE
+		FOR UPDATE
 	`, number).Scan(&status, &closingPending); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
@@ -341,6 +348,12 @@ func (h handler) preparePrint(c *gin.Context) {
 		Number: fmt.Sprintf("%04d", number),
 		Lines:  printLines,
 	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not prepare invoice print"})
+		return
+	}
+	if _, err := transaction.Exec(c.Request.Context(), `
+		UPDATE invoices SET print_prepared = TRUE WHERE number = $1
+	`, number); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not prepare invoice print"})
 		return
 	}
