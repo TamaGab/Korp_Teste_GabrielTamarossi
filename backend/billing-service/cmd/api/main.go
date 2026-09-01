@@ -13,6 +13,7 @@ import (
 
 	"github.com/TamaGab/Korp_Teste_GabrielTamarossi/backend/billing-service/internal/database"
 	"github.com/TamaGab/Korp_Teste_GabrielTamarossi/backend/billing-service/internal/health"
+	"github.com/TamaGab/Korp_Teste_GabrielTamarossi/backend/billing-service/internal/invoice"
 	"github.com/gin-gonic/gin"
 )
 
@@ -39,6 +40,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	inventoryServiceURL, err := requiredEnvironment("INVENTORY_SERVICE_URL")
+	if err != nil {
+		return err
+	}
 
 	logger.Info("starting billing service")
 
@@ -51,10 +56,15 @@ func run(logger *slog.Logger) error {
 	}
 	defer pool.Close()
 	logger.Info("database connection established")
+	if err := database.Migrate(connectionContext, pool); err != nil {
+		return fmt.Errorf("migrate billing database: %w", err)
+	}
+	logger.Info("database migrations applied")
 
 	router := gin.New()
 	router.Use(gin.Recovery(), corsMiddleware(allowedOrigin))
 	router.GET("/health", health.Handler)
+	invoice.RegisterRoutes(router, pool, inventoryServiceURL, &http.Client{Timeout: 5 * time.Second})
 
 	server := &http.Server{
 		Addr:              ":" + port,

@@ -29,6 +29,15 @@
         <mat-icon matListItemIcon>inventory_2</mat-icon>
         <span matListItemTitle>Products</span>
       </a>
+      <a
+        mat-list-item
+        routerLink="/invoices/new"
+        routerLinkActive="active"
+        (click)="closeAfterNavigation(sidenav)"
+      >
+        <mat-icon matListItemIcon>receipt_long</mat-icon>
+        <span matListItemTitle>Notas fiscais</span>
+      </a>
     </mat-nav-list>
 
     <p class="sidenav-footer">Technical challenge · 2026</p>

@@ -8,23 +8,22 @@ Angular frontend
    +----> Inventory Service ----> Inventory PostgreSQL
    |
    +----> Billing Service ------> Billing PostgreSQL
-
-Later:
-Billing Service ----HTTP----> Inventory Service
+                |
+                +----HTTP----> Inventory Service
 ```
 
-Each microservice owns its database. The inventory service never accesses the billing database, and the billing service never accesses the inventory database. Future service-to-service communication will use HTTP through Docker service names.
+Each microservice owns its database. The inventory service never accesses the billing database, and the billing service never accesses the inventory database. The billing service validates invoice Products through the inventory HTTP API using its Docker service name.
 
 ## Major directories
 
 - `frontend/`: the Angular CLI-generated standalone application and its development Dockerfile.
 - `backend/inventory-service/`: independent Go module for the inventory API and inventory database connection.
 - `backend/billing-service/`: independent Go module for the billing API and billing database connection.
-- `internal/database/`: PostgreSQL pool creation and startup connectivity check in each service.
+- `internal/database/`: PostgreSQL pool creation and automatic startup migrations in each service.
 - `internal/health/`: the HTTP health handler in each service.
+- `internal/product/`: Product and Available Stock behavior owned by the inventory service.
+- `internal/invoice/`: Invoice creation behavior owned by the billing service.
 - `cmd/api/`: each service's executable entry point, HTTP server, CORS configuration, and graceful shutdown.
-
-Feature packages and database migrations will be introduced when their first real product or invoice behavior is implemented. The initial scaffold intentionally contains no speculative domain, service, or repository layers.
 
 ## Requirements
 

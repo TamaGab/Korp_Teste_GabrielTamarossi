@@ -17,5 +17,9 @@ export const routes: Routes = [
     path: 'products/:id/edit',
     loadComponent: () => import('./products/product-form').then((module) => module.ProductForm),
   },
+  {
+    path: 'invoices/new',
+    loadComponent: () => import('./invoices/invoice-form').then((module) => module.InvoiceForm),
+  },
   { path: '**', redirectTo: '' },
 ];

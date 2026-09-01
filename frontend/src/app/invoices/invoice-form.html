@@ -1,0 +1,95 @@
+<header class="page-header">
+  <a mat-button routerLink="/"><mat-icon>arrow_back</mat-icon>Início</a>
+  <p class="eyebrow">Faturamento</p>
+  <h1>Nova nota fiscal</h1>
+  <p class="subtitle">Informe os produtos e as quantidades utilizadas.</p>
+</header>
+
+<mat-card appearance="outlined">
+  <mat-card-content>
+    @if (generalError()) {
+      <div class="alert" role="alert">{{ generalError() }}</div>
+    }
+
+    @if (loadingProducts()) {
+      <div class="state">Carregando produtos...</div>
+    } @else if (createdInvoice(); as invoice) {
+      <section class="confirmation" aria-live="polite">
+        <mat-icon>check_circle</mat-icon>
+        <h2>Nota fiscal {{ invoice.number }} cadastrada com sucesso.</h2>
+        <p>Status: Aberta</p>
+        <button mat-flat-button type="button" (click)="createAnother()">
+          Cadastrar outra nota fiscal
+        </button>
+      </section>
+    } @else if (!loadFailed() && products().length === 0) {
+      <div class="state">
+        <p>Nenhum produto cadastrado.</p>
+        <a mat-flat-button routerLink="/products/new">Cadastrar produto</a>
+      </div>
+    } @else if (!loadFailed()) {
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        <div formArrayName="lines" class="lines">
+          @for (line of lines.controls; track line; let index = $index) {
+            <section class="line" [formGroupName]="index">
+              <mat-form-field appearance="outline">
+                <mat-label>Produto</mat-label>
+                <select matNativeControl formControlName="productCode">
+                  <option value="">Selecione um produto</option>
+                  @for (product of products(); track product.id) {
+                    <option [value]="product.code">
+                      {{ product.code }} — {{ product.description }}
+                    </option>
+                  }
+                </select>
+                @if (line.controls.productCode.touched && line.controls.productCode.invalid) {
+                  <mat-error>Selecione um produto</mat-error>
+                }
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Quantidade</mat-label>
+                <input matInput type="number" min="1" step="1" formControlName="quantity" />
+                @if (line.controls.quantity.touched && line.controls.quantity.invalid) {
+                  <mat-error>Informe um número inteiro maior que zero</mat-error>
+                }
+              </mat-form-field>
+
+              <button
+                mat-icon-button
+                type="button"
+                aria-label="Remover produto"
+                [disabled]="lines.length === 1"
+                (click)="removeLine(index)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </section>
+          }
+        </div>
+
+        @if (lines.hasError('duplicateProducts')) {
+          <div class="alert" role="alert">Cada produto pode aparecer apenas uma vez.</div>
+        }
+
+        <button
+          mat-button
+          type="button"
+          data-testid="add-line"
+          [disabled]="lines.length >= products().length"
+          (click)="addLine()"
+        >
+          <mat-icon>add</mat-icon>
+          Adicionar produto
+        </button>
+
+        <div class="actions">
+          <a mat-button routerLink="/">Cancelar</a>
+          <button mat-flat-button type="submit" [disabled]="submitting()">
+            {{ submitting() ? 'Cadastrando...' : 'Cadastrar nota fiscal' }}
+          </button>
+        </div>
+      </form>
+    }
+  </mat-card-content>
+</mat-card>
