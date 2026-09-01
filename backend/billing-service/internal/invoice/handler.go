@@ -3,13 +3,16 @@ package invoice
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,7 +21,7 @@ var productCodePattern = regexp.MustCompile(`^[A-Z]{3}[0-9]{2}$`)
 type Invoice struct {
 	Number    string        `json:"number"`
 	Status    string        `json:"status"`
-	Lines     []InvoiceLine `json:"lines"`
+	Lines     []InvoiceLine `json:"lines,omitempty"`
 	CreatedAt time.Time     `json:"createdAt"`
 }
 
@@ -61,6 +64,91 @@ func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool, inventoryURL string,
 		httpClient:   httpClient,
 	}
 	router.POST("/invoices", h.create)
+	router.GET("/invoices", h.list)
+	router.GET("/invoices/:number", h.get)
+}
+
+func (h handler) list(c *gin.Context) {
+	rows, err := h.pool.Query(c.Request.Context(), `
+		SELECT number, status, created_at
+		FROM invoices
+		ORDER BY number DESC
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not list invoices"})
+		return
+	}
+	defer rows.Close()
+
+	invoices := make([]Invoice, 0)
+	for rows.Next() {
+		var number int64
+		var current Invoice
+		if err := rows.Scan(&number, &current.Status, &current.CreatedAt); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not list invoices"})
+			return
+		}
+		current.Number = fmt.Sprintf("%04d", number)
+		current.CreatedAt = current.CreatedAt.UTC()
+		invoices = append(invoices, current)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not list invoices"})
+		return
+	}
+
+	c.JSON(http.StatusOK, invoices)
+}
+
+func (h handler) get(c *gin.Context) {
+	number, err := strconv.ParseInt(c.Param("number"), 10, 64)
+	if err != nil || number <= 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+		return
+	}
+
+	current := Invoice{Number: fmt.Sprintf("%04d", number)}
+	if err := h.pool.QueryRow(c.Request.Context(), `
+		SELECT status, created_at
+		FROM invoices
+		WHERE number = $1
+	`, number).Scan(&current.Status, &current.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not get invoice"})
+		return
+	}
+	current.CreatedAt = current.CreatedAt.UTC()
+
+	rows, err := h.pool.Query(c.Request.Context(), `
+		SELECT product_code, product_description, quantity
+		FROM invoice_lines
+		WHERE invoice_number = $1
+		ORDER BY inventory_product_id
+	`, number)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not get invoice"})
+		return
+	}
+	defer rows.Close()
+
+	current.Lines = make([]InvoiceLine, 0)
+	for rows.Next() {
+		var line InvoiceLine
+		if err := rows.Scan(&line.Code, &line.Description, &line.Quantity); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not get invoice"})
+			return
+		}
+		current.Lines = append(current.Lines, line)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not get invoice"})
+		return
+	}
+
+	c.JSON(http.StatusOK, current)
 }
 
 func (h handler) create(c *gin.Context) {

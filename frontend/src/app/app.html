@@ -31,7 +31,7 @@
       </a>
       <a
         mat-list-item
-        routerLink="/invoices/new"
+        routerLink="/invoices"
         routerLinkActive="active"
         (click)="closeAfterNavigation(sidenav)"
       >
@@ -45,12 +45,16 @@
 
   <mat-sidenav-content>
     @if (isCompactNavigation()) {
-      <mat-toolbar>
-        <button type="button" aria-label="Open navigation" (click)="sidenav.toggle()">
-          <mat-icon>menu</mat-icon>
-        </button>
-        <span>Korp Inventory</span>
-      </mat-toolbar>
+    <mat-toolbar>
+      <button
+        type="button"
+        aria-label="Open navigation"
+        (click)="sidenav.toggle()"
+      >
+        <mat-icon>menu</mat-icon>
+      </button>
+      <span>Korp Inventory</span>
+    </mat-toolbar>
     }
     <main><router-outlet /></main>
   </mat-sidenav-content>

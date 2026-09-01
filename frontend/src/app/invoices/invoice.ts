@@ -1,6 +1,6 @@
 export interface Invoice {
   number: string;
-  status: 'OPEN' | 'CLOSED';
+  status: "OPEN" | "CLOSED";
   lines: InvoiceLine[];
   createdAt: string;
 }
@@ -11,6 +11,8 @@ export interface InvoiceLine {
   quantity: number;
 }
 
+export type InvoiceSummary = Omit<Invoice, "lines">;
+
 export interface CreateInvoice {
   lines: CreateInvoiceLine[];
 }
@@ -18,4 +20,8 @@ export interface CreateInvoice {
 export interface CreateInvoiceLine {
   productCode: string;
   quantity: number;
+}
+
+export function invoiceStatusLabel(status: Invoice["status"]) {
+  return status === "OPEN" ? "Aberta" : "Fechada";
 }

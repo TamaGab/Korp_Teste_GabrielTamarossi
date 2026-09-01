@@ -1,0 +1,88 @@
+:host {
+  display: block;
+}
+
+.page-header {
+  align-items: flex-end;
+  display: flex;
+  gap: 2rem;
+  justify-content: space-between;
+  margin: 1.5rem 0 2rem;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  letter-spacing: -0.04em;
+}
+
+h2 {
+  font-size: 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin-top: 0.5rem;
+}
+
+.status {
+  background: #e8f1eb;
+  border-radius: 999px;
+  color: #27533d;
+  font-weight: 700;
+  padding: 0.5rem 0.8rem;
+}
+
+.table-container,
+.state {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+table {
+  background: transparent;
+  min-width: 36rem;
+  width: 100%;
+}
+
+.state {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+  min-height: 14rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.error {
+  color: #a72b1f;
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

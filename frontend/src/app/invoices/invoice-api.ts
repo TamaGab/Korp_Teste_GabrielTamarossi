@@ -1,13 +1,21 @@
-import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
-import { CreateInvoice, Invoice } from './invoice';
+import { HttpClient } from "@angular/common/http";
+import { Injectable, inject } from "@angular/core";
+import { CreateInvoice, Invoice, InvoiceSummary } from "./invoice";
 
-@Injectable({ providedIn: 'root' })
+@Injectable({ providedIn: "root" })
 export class InvoiceApi {
   private readonly http = inject(HttpClient);
-  private readonly invoicesUrl = 'http://localhost:8082/invoices';
+  private readonly invoicesUrl = "http://localhost:8082/invoices";
 
   create(invoice: CreateInvoice) {
     return this.http.post<Invoice>(this.invoicesUrl, invoice);
+  }
+
+  list() {
+    return this.http.get<InvoiceSummary[]>(this.invoicesUrl);
+  }
+
+  get(number: string) {
+    return this.http.get<Invoice>(`${this.invoicesUrl}/${number}`);
   }
 }

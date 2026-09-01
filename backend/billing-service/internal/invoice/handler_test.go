@@ -72,6 +72,120 @@ func TestCreatedInvoicesReceiveIncreasingNumbers(t *testing.T) {
 	}
 }
 
+func TestUserCanListInvoices(t *testing.T) {
+	inventory := newInventoryServer(t, map[string]string{
+		"/products": `[{"id":1,"code":"LAP01","description":"Laptop","stock":7}]`,
+	})
+	router := newTestRouter(t, inventory.URL)
+
+	createdResponse := performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":2}]}`)
+	if createdResponse.Code != http.StatusCreated {
+		t.Fatalf("POST /invoices status = %d, want 201; body = %s", createdResponse.Code, createdResponse.Body.String())
+	}
+
+	response := performRequest(router, http.MethodGet, "/invoices", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /invoices status = %d, want 200; body = %s", response.Code, response.Body.String())
+	}
+
+	var invoices []invoice.Invoice
+	decodeResponse(t, response, &invoices)
+	if len(invoices) != 1 {
+		t.Fatalf("GET /invoices body = %+v, want one Invoice", invoices)
+	}
+	if invoices[0].Number != "0001" || invoices[0].Status != "OPEN" || invoices[0].CreatedAt.IsZero() {
+		t.Fatalf("GET /invoices Invoice = %+v, want formatted number, OPEN status and timestamp", invoices[0])
+	}
+}
+
+func TestListingInvoicesReturnsAnEmptyCollection(t *testing.T) {
+	response := performRequest(newTestRouter(t, "http://inventory.invalid"), http.MethodGet, "/invoices", "")
+
+	if response.Code != http.StatusOK || response.Body.String() != "[]" {
+		t.Fatalf("GET /invoices = %d / %s, want 200 / []", response.Code, response.Body.String())
+	}
+}
+
+func TestUserCanConsultInvoiceWithHistoricalProductData(t *testing.T) {
+	products := `[{"id":1,"code":"LAP01","description":"Laptop original","stock":7}]`
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(products))
+	}))
+	t.Cleanup(inventory.Close)
+	router := newTestRouter(t, inventory.URL)
+
+	createdResponse := performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":2}]}`)
+	if createdResponse.Code != http.StatusCreated {
+		t.Fatalf("POST /invoices status = %d, want 201; body = %s", createdResponse.Code, createdResponse.Body.String())
+	}
+	products = `[{"id":1,"code":"NEW99","description":"Descrição alterada","stock":7}]`
+
+	response := performRequest(router, http.MethodGet, "/invoices/0001", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /invoices/0001 status = %d, want 200; body = %s", response.Code, response.Body.String())
+	}
+
+	var found invoice.Invoice
+	decodeResponse(t, response, &found)
+	if found.Number != "0001" || found.Status != "OPEN" {
+		t.Fatalf("GET /invoices/0001 identity = %q / %q, want 0001 / OPEN", found.Number, found.Status)
+	}
+	if len(found.Lines) != 1 {
+		t.Fatalf("GET /invoices/0001 lines = %+v, want one historical Invoice Line", found.Lines)
+	}
+	if found.Lines[0].Code != "LAP01" || found.Lines[0].Description != "Laptop original" || found.Lines[0].Quantity != 2 {
+		t.Fatalf("GET /invoices/0001 line = %+v, want original Product snapshot", found.Lines[0])
+	}
+}
+
+func TestConsultingMissingInvoiceReturnsNotFound(t *testing.T) {
+	router := newTestRouter(t, "http://inventory.invalid")
+
+	for _, path := range []string{"/invoices/9999", "/invoices/invalid"} {
+		response := performRequest(router, http.MethodGet, path, "")
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("GET %s status = %d, want 404; body = %s", path, response.Code, response.Body.String())
+		}
+		var body map[string]string
+		decodeResponse(t, response, &body)
+		if body["error"] != "invoice not found" {
+			t.Fatalf("GET %s error = %q, want invoice not found", path, body["error"])
+		}
+	}
+}
+
+func TestOpenAndClosedInvoicesRemainConsultable(t *testing.T) {
+	inventory := newInventoryServer(t, map[string]string{
+		"/products": `[{"id":1,"code":"LAP01","description":"Laptop","stock":7}]`,
+	})
+	router, pool := newTestRouterWithPool(t, inventory.URL)
+	body := `{"lines":[{"productCode":"LAP01","quantity":1}]}`
+	performRequest(router, http.MethodPost, "/invoices", body)
+	performRequest(router, http.MethodPost, "/invoices", body)
+	if _, err := pool.Exec(context.Background(), "UPDATE invoices SET status = 'CLOSED' WHERE number = 1"); err != nil {
+		t.Fatalf("close Invoice fixture: %v", err)
+	}
+
+	listResponse := performRequest(router, http.MethodGet, "/invoices", "")
+	var invoices []invoice.Invoice
+	decodeResponse(t, listResponse, &invoices)
+	if listResponse.Code != http.StatusOK || len(invoices) != 2 {
+		t.Fatalf("GET /invoices = %d / %+v, want both Invoices", listResponse.Code, invoices)
+	}
+	statuses := map[string]string{invoices[0].Number: invoices[0].Status, invoices[1].Number: invoices[1].Status}
+	if statuses["0001"] != "CLOSED" || statuses["0002"] != "OPEN" {
+		t.Fatalf("GET /invoices statuses = %+v, want 0001 CLOSED and 0002 OPEN", statuses)
+	}
+
+	detailResponse := performRequest(router, http.MethodGet, "/invoices/0001", "")
+	var closed invoice.Invoice
+	decodeResponse(t, detailResponse, &closed)
+	if detailResponse.Code != http.StatusOK || closed.Status != "CLOSED" {
+		t.Fatalf("GET /invoices/0001 = %d / %+v, want consultable CLOSED Invoice", detailResponse.Code, closed)
+	}
+}
+
 func TestCreateInvoiceRejectsInvalidInput(t *testing.T) {
 	inventory := newInventoryServer(t, map[string]string{
 		"/products": `[{"id":1,"code":"LAP01","description":"Laptop","stock":7}]`,
@@ -166,12 +280,18 @@ func newInventoryServer(t *testing.T, products map[string]string) *httptest.Serv
 
 func newTestRouter(t *testing.T, inventoryURL string) http.Handler {
 	t.Helper()
+	router, _ := newTestRouterWithPool(t, inventoryURL)
+	return router
+}
+
+func newTestRouterWithPool(t *testing.T, inventoryURL string) (http.Handler, *pgxpool.Pool) {
+	t.Helper()
 	pool := newTestPool(t)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	invoice.RegisterRoutes(router, pool, inventoryURL, http.DefaultClient)
-	return router
+	return router, pool
 }
 
 func newTestPool(t *testing.T) *pgxpool.Pool {

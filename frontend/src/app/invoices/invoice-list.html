@@ -1,0 +1,49 @@
+<header class="page-header">
+  <div>
+    <p class="eyebrow">Faturamento</p>
+    <h1>Notas fiscais</h1>
+    <p class="subtitle">Consulte as notas fiscais cadastradas.</p>
+  </div>
+  <a mat-flat-button routerLink="/invoices/new">Nova nota fiscal</a>
+</header>
+
+@if (loading()) {
+<div class="state">
+  <mat-spinner diameter="40" /><span>Carregando notas fiscais...</span>
+</div>
+} @else if (loadFailed()) {
+<div class="state error" role="alert">
+  Não foi possível carregar as notas fiscais. Tente novamente.
+</div>
+} @else if (invoices().length === 0) {
+<div class="state">Nenhuma nota fiscal cadastrada</div>
+} @else {
+<div class="table-container">
+  <table mat-table [dataSource]="invoices()">
+    <ng-container matColumnDef="number">
+      <th mat-header-cell *matHeaderCellDef>Número</th>
+      <td mat-cell *matCellDef="let invoice">{{ invoice.number }}</td>
+    </ng-container>
+    <ng-container matColumnDef="status">
+      <th mat-header-cell *matHeaderCellDef>Status</th>
+      <td mat-cell *matCellDef="let invoice">
+        {{ statusLabel(invoice.status) }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="createdAt">
+      <th mat-header-cell *matHeaderCellDef>Cadastrada em</th>
+      <td mat-cell *matCellDef="let invoice">
+        {{ invoice.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef>Ações</th>
+      <td mat-cell *matCellDef="let invoice">
+        <a mat-button [routerLink]="['/invoices', invoice.number]">Consultar</a>
+      </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+  </table>
+</div>
+}
