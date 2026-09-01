@@ -60,7 +60,7 @@ func run(logger *slog.Logger) error {
 
 	router := gin.New()
 	router.Use(gin.Recovery(), corsMiddleware(allowedOrigin))
-	router.GET("/health", health.Handler)
+	router.GET("/health", health.Handler(pool))
 	product.RegisterRoutes(router, pool)
 
 	server := &http.Server{

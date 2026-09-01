@@ -64,7 +64,7 @@ func run(logger *slog.Logger) error {
 
 	router := gin.New()
 	router.Use(gin.Recovery(), corsMiddleware(allowedOrigin))
-	router.GET("/health", health.Handler)
+	router.GET("/health", health.Handler(pool))
 	invoice.RegisterRoutes(router, pool, inventoryServiceURL, &http.Client{Timeout: 5 * time.Second})
 
 	server := &http.Server{

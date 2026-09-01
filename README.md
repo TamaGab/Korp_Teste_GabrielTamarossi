@@ -75,11 +75,23 @@ Warning: `-v` permanently deletes the data in both development PostgreSQL volume
 | Inventory PostgreSQL | localhost:5433               |
 | Billing PostgreSQL   | localhost:5434               |
 
-Both API health endpoints return:
+When the API and its database are available, both health endpoints return HTTP `200`:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "service": "ok",
+  "database": "ok"
+}
+```
+
+When the API can respond but its database is unavailable, the endpoint returns HTTP `503`:
+
+```json
+{
+  "status": "degraded",
+  "service": "ok",
+  "database": "unavailable"
 }
 ```
 
