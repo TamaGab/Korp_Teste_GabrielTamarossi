@@ -1,66 +1,68 @@
-<a mat-button routerLink="/invoices">Voltar para notas fiscais</a>
+<a mat-button routerLink="/invoices"><mat-icon>arrow_back</mat-icon>Notas fiscais</a>
 
 @if (loading()) {
-<div class="state">
-  <mat-spinner diameter="40" /><span>Carregando nota fiscal...</span>
-</div>
+  <div class="state"><mat-spinner diameter="40" /><span>Carregando nota fiscal...</span></div>
 } @else if (errorMessage()) {
-<div class="state error" role="alert">{{ errorMessage() }}</div>
+  <div class="state error" role="alert">{{ errorMessage() }}</div>
 } @else if (invoice(); as current) {
-<header class="page-header">
-  <div>
-    <p class="eyebrow">Faturamento</p>
-    <h1>Nota fiscal {{ current.number }}</h1>
-    <p class="subtitle">
-      Cadastrada em {{ current.createdAt | date: 'dd/MM/yyyy HH:mm' }}
-    </p>
-  </div>
-  <div class="header-actions">
-    <span class="status">{{ statusLabel(current.status) }}</span>
-    @if (current.status === 'OPEN') {
-    <button
-      mat-flat-button
-      type="button"
-      [disabled]="preparingPrint()"
-      (click)="preparePrint()"
-    >
-      {{ preparingPrint() ? 'Verificando estoque...' : 'Imprimir' }}
-    </button>
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Faturamento</p>
+      <h1>
+        Nota fiscal <span class="data-code">{{ current.number }}</span>
+      </h1>
+      <p class="subtitle">Cadastrada em {{ current.createdAt | date: 'dd/MM/yyyy HH:mm' }}</p>
+    </div>
+    <div class="header-actions">
+      <span class="status" [class.status-open]="current.status === 'OPEN'">
+        {{ statusLabel(current.status) }}
+      </span>
+      @if (current.status === 'OPEN') {
+        <button
+          mat-flat-button
+          type="button"
+          [disabled]="preparingPrint()"
+          (click)="preparePrint()"
+        >
+          {{ preparingPrint() ? 'Verificando estoque...' : 'Imprimir' }}
+        </button>
+      }
+    </div>
+  </header>
+
+  @if (printErrorMessages().length > 0) {
+    <div class="print-errors" role="alert">
+      @for (message of printErrorMessages(); track message) {
+        <p>{{ message }}</p>
+      }
+    </div>
+  }
+
+  <section aria-labelledby="invoice-lines-title">
+    <h2 id="invoice-lines-title">Produtos</h2>
+    @if (current.lines.length === 0) {
+      <div class="state">Nenhum produto nesta nota fiscal</div>
+    } @else {
+      <div class="table-container">
+        <table mat-table [dataSource]="current.lines">
+          <ng-container matColumnDef="code">
+            <th mat-header-cell *matHeaderCellDef>Código</th>
+            <td mat-cell *matCellDef="let line">
+              <span class="data-code">{{ line.code }}</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef>Descrição</th>
+            <td mat-cell *matCellDef="let line">{{ line.description }}</td>
+          </ng-container>
+          <ng-container matColumnDef="quantity">
+            <th mat-header-cell *matHeaderCellDef>Quantidade</th>
+            <td mat-cell *matCellDef="let line">{{ line.quantity }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      </div>
     }
-  </div>
-</header>
-
-@if (printErrorMessages().length > 0) {
-<div class="print-errors" role="alert">
-  @for (message of printErrorMessages(); track message) {
-  <p>{{ message }}</p>
-  }
-</div>
-}
-
-<section aria-labelledby="invoice-lines-title">
-  <h2 id="invoice-lines-title">Produtos</h2>
-  @if (current.lines.length === 0) {
-  <div class="state">Nenhum produto nesta nota fiscal</div>
-  } @else {
-  <div class="table-container">
-    <table mat-table [dataSource]="current.lines">
-      <ng-container matColumnDef="code">
-        <th mat-header-cell *matHeaderCellDef>Código</th>
-        <td mat-cell *matCellDef="let line">{{ line.code }}</td>
-      </ng-container>
-      <ng-container matColumnDef="description">
-        <th mat-header-cell *matHeaderCellDef>Descrição</th>
-        <td mat-cell *matCellDef="let line">{{ line.description }}</td>
-      </ng-container>
-      <ng-container matColumnDef="quantity">
-        <th mat-header-cell *matHeaderCellDef>Quantidade</th>
-        <td mat-cell *matCellDef="let line">{{ line.quantity }}</td>
-      </ng-container>
-      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-    </table>
-  </div>
-  }
-</section>
+  </section>
 }

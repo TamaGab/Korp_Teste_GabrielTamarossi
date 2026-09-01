@@ -2,9 +2,9 @@
   display: block;
 }
 
-.hero {
-  max-width: 58rem;
-  padding-top: clamp(2rem, 8vh, 7rem);
+.workspace {
+  max-width: 62rem;
+  padding-top: clamp(0.5rem, 3vh, 2rem);
 }
 
 h1,
@@ -14,64 +14,83 @@ p {
 }
 
 h1 {
-  font-size: clamp(2.5rem, 7vw, 5.5rem);
+  font-size: clamp(2rem, 4vw, 3.15rem);
   font-weight: 650;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-  max-width: 16ch;
-}
-
-.eyebrow {
-  color: var(--accent);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  margin-bottom: 1rem;
-  text-transform: uppercase;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+  max-width: 20ch;
 }
 
 .lead {
   color: var(--muted);
-  font-size: 1.1rem;
-  line-height: 1.6;
-  margin-top: 1.5rem;
-  max-width: 38rem;
+  line-height: 1.55;
+  margin-top: 0.75rem;
+  max-width: 36rem;
 }
 
-mat-card {
+.workspace-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 2.25rem;
+}
+
+.workspace-grid mat-card {
   background: var(--surface);
   border-color: var(--border);
-  border-radius: 1rem;
-  margin-top: 3rem;
-  max-width: 42rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgb(29 41 53 / 4%);
 }
 
 mat-card-content {
-  align-items: center;
-  display: grid;
-  gap: 1.25rem;
-  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  display: flex;
+  flex-direction: column;
+  min-height: 17rem;
   padding: 1.5rem;
 }
 
-mat-card-content > mat-icon {
-  color: var(--accent);
-  height: 2rem;
-  width: 2rem;
+.card-icon {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: 0.6rem;
+  color: var(--primary);
+  display: flex;
+  height: 2.75rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  width: 2.75rem;
 }
 
-mat-card-content p {
-  color: var(--muted);
+.card-label {
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+h2 {
+  font-size: 1.25rem;
   margin-top: 0.25rem;
 }
 
+mat-card-content div > p:last-child {
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 0.5rem;
+}
+
+mat-card-content a {
+  margin-top: auto;
+}
+
 @media (max-width: 640px) {
-  mat-card-content {
-    align-items: start;
-    grid-template-columns: auto 1fr;
+  .workspace-grid {
+    grid-template-columns: 1fr;
   }
 
-  mat-card-content a {
-    grid-column: 1 / -1;
+  mat-card-content {
+    min-height: 15.5rem;
   }
 }

@@ -55,7 +55,9 @@
       >
         <ng-container matColumnDef="code">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Código</th>
-          <td mat-cell *matCellDef="let product">{{ product.code }}</td>
+          <td mat-cell *matCellDef="let product">
+            <span class="data-code">{{ product.code }}</span>
+          </td>
         </ng-container>
         <ng-container matColumnDef="description">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Descrição</th>

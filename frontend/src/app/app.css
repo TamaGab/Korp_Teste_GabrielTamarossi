@@ -9,60 +9,57 @@ mat-sidenav-container {
 }
 
 mat-sidenav {
-  background: #17211d;
+  background: var(--surface);
   border-radius: 0;
-  color: #f3f5ef;
-  padding: 1.5rem 1rem;
-  width: 16rem;
+  border-right: 1px solid var(--border);
+  color: var(--text);
+  padding: 1.35rem 0.9rem;
+  width: 16.5rem;
 }
 
 .brand {
   align-items: center;
   color: inherit;
   display: flex;
-  font-size: 1.05rem;
-  font-weight: 650;
+  font-size: 0.9rem;
+  font-weight: 750;
   gap: 0.75rem;
-  padding: 0 0.75rem 2.25rem;
+  letter-spacing: 0.035em;
+  padding: 0.2rem 0.7rem 2rem;
   text-decoration: none;
 }
 
 .brand-mark {
-  background: var(--accent);
-  border-radius: 0.55rem;
-  color: #102019;
+  background: var(--primary);
+  border-radius: 0.45rem;
+  color: #ffffff;
   display: grid;
-  height: 2rem;
+  font-size: 0.7rem;
+  height: 2.1rem;
+  letter-spacing: -0.02em;
   place-items: center;
-  width: 2rem;
+  width: 2.1rem;
 }
 
 mat-nav-list a {
-  --mdc-list-list-item-label-text-color: #d4cbcb;
-  --mdc-list-list-item-leading-icon-color: #a09193;
-  border-radius: 0.6rem;
-  margin-bottom: 0.35rem;
+  --mdc-list-list-item-label-text-color: #526170;
+  --mdc-list-list-item-leading-icon-color: #748392;
+  border-radius: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 mat-nav-list a.active {
-  --mdc-list-list-item-container-color: rgba(210, 128, 128, 0.14);
-  --mdc-list-list-item-label-text-color: #ffffff;
-  --mdc-list-list-item-leading-icon-color: var(--accent);
-}
-
-.sidenav-footer {
-  bottom: 1.5rem;
-  color: #829087;
-  font-size: 0.75rem;
-  left: 1.75rem;
-  margin: 0;
-  position: absolute;
+  --mdc-list-list-item-container-color: var(--primary-soft);
+  --mdc-list-list-item-label-text-color: var(--primary);
+  --mdc-list-list-item-leading-icon-color: var(--primary);
+  font-weight: 650;
 }
 
 mat-toolbar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   gap: 1rem;
+  height: 4rem;
 }
 
 mat-toolbar button {
@@ -79,5 +76,11 @@ main {
   margin: 0 auto;
   max-width: 90rem;
   min-height: 100vh;
-  padding: clamp(1.5rem, 4vw, 4rem);
+  padding: clamp(1.5rem, 3.5vw, 3.5rem);
+}
+
+@media (max-width: 900px) {
+  main {
+    min-height: calc(100vh - 4rem);
+  }
 }

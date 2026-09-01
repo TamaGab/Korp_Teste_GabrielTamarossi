@@ -1,14 +1,25 @@
 @import '@angular/material/prebuilt-themes/azure-blue.css';
 
 :root {
-  --accent: #65cf91;
-  --background: #f2f3ed;
-  --border: #d8ddd5;
-  --muted: #68736c;
+  --background: #f5f7fa;
+  --border: #d8e0e8;
+  --border-strong: #c2ccd6;
+  --muted: #667482;
+  --primary: #315e8a;
+  --primary-soft: #e9f1f8;
   --surface: #ffffff;
-  color: #1c2721;
+  --text: #1d2935;
+  --success: #2f6b4f;
+  --success-soft: #eaf4ee;
+  --danger: #a13b34;
+  --danger-soft: #fff1f0;
+  --mat-sys-primary: var(--primary);
+  --mat-sys-on-primary: #ffffff;
+  --mat-sys-surface: var(--surface);
+  --mat-sys-on-surface: var(--text);
+  --mat-sys-outline: var(--border-strong);
+  color: var(--text);
   font-family:
-    Inter,
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -17,12 +28,109 @@
     sans-serif;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
 body {
   background: var(--background);
   margin: 0;
+  min-width: 20rem;
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
+}
+
+::selection {
+  background: #cfe0f0;
+}
+
+.page-header {
+  align-items: flex-end;
+  display: flex;
+  gap: 2rem;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+}
+
+.page-header > a:first-child {
+  align-self: flex-start;
+}
+
+.page-header h1,
+.page-header p,
+.eyebrow,
+.subtitle {
+  margin: 0;
+}
+
+.page-header h1 {
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.eyebrow {
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 0.5rem;
+}
+
+.data-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0.025em;
+}
+
+.table-container {
+  box-shadow: 0 1px 2px rgb(29 41 53 / 4%);
+}
+
+.mat-mdc-header-cell {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.mat-mdc-row {
+  transition: background-color 120ms ease;
+}
+
+.mat-mdc-row:hover {
+  background: #f8fafc;
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mat-mdc-row {
+    transition: none;
+  }
 }

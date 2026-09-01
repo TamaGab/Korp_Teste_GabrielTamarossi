@@ -1,16 +1,32 @@
-<section class="hero">
-  <p class="eyebrow">Inventory workspace</p>
-  <h1>Keep every Product ready for what comes next.</h1>
-  <p class="lead">Register Products and track their Available Stock from one focused workspace.</p>
+<section class="workspace">
+  <header class="workspace-header">
+    <h1>Sistema de emissão de Notas Fiscais</h1>
+    <p class="lead">Acesse as funcionalidades do desafio.</p>
+  </header>
 
-  <mat-card appearance="outlined">
-    <mat-card-content>
-      <mat-icon>inventory_2</mat-icon>
-      <div>
-        <h2>Products</h2>
-        <p>View the catalog or register a new Product.</p>
-      </div>
-      <a mat-flat-button routerLink="/products">Open Products</a>
-    </mat-card-content>
-  </mat-card>
+  <div class="workspace-grid">
+    <mat-card>
+      <mat-card-content>
+        <span class="card-icon"><mat-icon>inventory_2</mat-icon></span>
+        <div>
+          <p class="card-label">Estoque</p>
+          <h2>Produtos</h2>
+          <p>Consulte o catálogo, acompanhe o estoque disponível e cadastre produtos.</p>
+        </div>
+        <a mat-flat-button routerLink="/products">Acessar produtos</a>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-content>
+        <span class="card-icon"><mat-icon>receipt_long</mat-icon></span>
+        <div>
+          <p class="card-label">Faturamento</p>
+          <h2>Notas fiscais</h2>
+          <p>Cadastre novas notas fiscais e consulte os documentos já emitidos.</p>
+        </div>
+        <a mat-flat-button routerLink="/invoices">Acessar notas fiscais</a>
+      </mat-card-content>
+    </mat-card>
+  </div>
 </section>

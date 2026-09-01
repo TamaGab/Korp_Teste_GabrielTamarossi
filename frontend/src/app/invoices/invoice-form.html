@@ -1,5 +1,5 @@
 <header class="page-header">
-  <a mat-button routerLink="/"><mat-icon>arrow_back</mat-icon>Início</a>
+  <a mat-button routerLink="/invoices"><mat-icon>arrow_back</mat-icon>Notas Fiscais</a>
   <p class="eyebrow">Faturamento</p>
   <h1>Nova nota fiscal</h1>
   <p class="subtitle">Informe os produtos e as quantidades utilizadas.</p>
@@ -20,6 +20,9 @@
         <p>Status: Aberta</p>
         <button mat-flat-button type="button" (click)="createAnother()">
           Cadastrar outra nota fiscal
+        </button>
+        <button mat-flat-button type="button" routerLink="/invoices">
+          Voltar para notas fiscais
         </button>
       </section>
     } @else if (!loadFailed() && products().length === 0) {

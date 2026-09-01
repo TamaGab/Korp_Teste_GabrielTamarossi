@@ -17,11 +17,11 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('renders the shell with navigation to Products', async () => {
+  it('renders the shell with navigation to products', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('Korp Inventory');
-    expect(compiled.querySelector('a[href="/products"]')?.textContent).toContain('Products');
+    expect(compiled.textContent).toContain('KORP DESAFIO');
+    expect(compiled.querySelector('a[href="/products"]')?.textContent).toContain('Produtos');
   });
 });

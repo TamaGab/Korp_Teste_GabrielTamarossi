@@ -1,11 +1,11 @@
 :host {
   display: block;
   margin: 0 auto;
-  max-width: 58rem;
+  max-width: 56rem;
 }
 
 .page-header {
-  margin-bottom: 2rem;
+  display: block;
 }
 
 .page-header > a {
@@ -13,36 +13,17 @@
   margin-left: -1rem;
 }
 
-h1,
 h2,
 p {
   margin: 0;
 }
 
-h1 {
-  font-size: clamp(2rem, 5vw, 3.4rem);
-  letter-spacing: -0.04em;
-}
-
-.eyebrow {
-  color: var(--accent);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  margin-bottom: 0.4rem;
-  text-transform: uppercase;
-}
-
-.subtitle {
-  color: var(--muted);
-  margin-top: 0.5rem;
-}
-
 mat-card {
   background: var(--surface);
   border-color: var(--border);
-  border-radius: 1rem;
-  padding: 1rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgb(29 41 53 / 4%);
+  padding: 0.75rem;
 }
 
 form,
@@ -53,30 +34,35 @@ form,
 
 .line {
   align-items: start;
+  border-bottom: 1px solid var(--border);
   display: grid;
   gap: 0.75rem;
   grid-template-columns: minmax(14rem, 1fr) minmax(8rem, 12rem) auto;
+  padding-bottom: 0.25rem;
 }
 
 .alert {
-  background: #fff0ed;
-  border: 1px solid #efb5ad;
+  background: var(--danger-soft);
+  border: 1px solid #e5b5b1;
   border-radius: 0.6rem;
-  color: #8d2117;
+  color: var(--danger);
   margin-bottom: 1rem;
   padding: 0.8rem 1rem;
 }
 
 .actions {
+  border-top: 1px solid var(--border);
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
+  padding-top: 1.25rem;
 }
 
 .confirmation,
 .state {
   align-items: center;
+  color: var(--muted);
   display: grid;
   gap: 1rem;
   justify-items: center;
@@ -85,10 +71,10 @@ form,
 }
 
 .confirmation > mat-icon {
-  color: #257a4a;
+  color: var(--success);
+  font-size: 3rem;
   height: 3rem;
   width: 3rem;
-  font-size: 3rem;
 }
 
 @media (max-width: 42rem) {
