@@ -22,4 +22,8 @@ export class ProductApi {
   update(id: number, product: CreateProduct) {
     return this.http.put<Product>(`${this.productsUrl}/${id}`, product);
   }
+
+  delete(id: number) {
+    return this.http.delete<void>(`${this.productsUrl}/${id}`);
+  }
 }

@@ -4,7 +4,12 @@
     <h1>Produtos</h1>
     <p class="subtitle">Produtos cadastrados e disponíveis para futuras faturas.</p>
   </div>
-  <button mat-flat-button type="button" routerLink="/products/new" [disabled]="loading()">
+  <button
+    mat-flat-button
+    type="button"
+    routerLink="/products/new"
+    [disabled]="loading() || deletingProductId() !== null"
+  >
     Novo produto
   </button>
 </header>
@@ -18,6 +23,9 @@
 } @else if (products().length === 0) {
   <div class="state">Nenhum produto cadastrado</div>
 } @else {
+  @if (deleteError()) {
+    <div class="delete-error" role="alert">{{ deleteError() }}</div>
+  }
   <div class="filters">
     <mat-form-field appearance="outline">
       <mat-label>Buscar produtos</mat-label>
@@ -72,7 +80,20 @@
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef>Ações</th>
           <td mat-cell *matCellDef="let product">
-            <a mat-button [routerLink]="['/products', product.id, 'edit']">Editar</a>
+            <a
+              mat-button
+              [routerLink]="deletingProductId() === null ? ['/products', product.id, 'edit'] : null"
+              [attr.aria-disabled]="deletingProductId() !== null"
+              >Editar</a
+            >
+            <button
+              mat-button
+              type="button"
+              [disabled]="deletingProductId() !== null"
+              (click)="confirmDelete(product)"
+            >
+              Excluir
+            </button>
           </td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>

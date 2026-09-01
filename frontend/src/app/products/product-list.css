@@ -98,6 +98,15 @@ table {
   color: #a72b1f;
 }
 
+.delete-error {
+  background: #fff0ee;
+  border: 1px solid #d58279;
+  border-radius: 0.6rem;
+  color: #8c2117;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+}
+
 @media (max-width: 640px) {
   .page-header {
     align-items: stretch;

@@ -41,6 +41,27 @@ func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool) {
 	router.GET("/products", h.list)
 	router.GET("/products/:id", h.get)
 	router.PUT("/products/:id", h.update)
+	router.DELETE("/products/:id", h.delete)
+}
+
+func (h handler) delete(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
+
+	result, err := h.pool.Exec(c.Request.Context(), "DELETE FROM products WHERE id = $1", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not delete product"})
+		return
+	}
+	if result.RowsAffected() == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h handler) get(c *gin.Context) {

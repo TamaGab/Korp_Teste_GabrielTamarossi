@@ -159,6 +159,44 @@ func TestUpdateProductRejectsDuplicateCode(t *testing.T) {
 	}
 }
 
+func TestUserCanDeleteProductAndReuseItsCode(t *testing.T) {
+	router := newTestRouter(t)
+	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":7}`)
+	var created product.Product
+	decodeResponse(t, createResponse, &created)
+
+	deleteResponse := performRequest(router, http.MethodDelete, fmt.Sprintf("/products/%d", created.ID), "")
+	if deleteResponse.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /products/:id status = %d, want %d; body = %s", deleteResponse.Code, http.StatusNoContent, deleteResponse.Body.String())
+	}
+	if deleteResponse.Body.Len() != 0 {
+		t.Fatalf("DELETE /products/:id body = %q, want empty body", deleteResponse.Body.String())
+	}
+
+	getResponse := performRequest(router, http.MethodGet, fmt.Sprintf("/products/%d", created.ID), "")
+	if getResponse.Code != http.StatusNotFound {
+		t.Fatalf("GET deleted Product status = %d, want %d", getResponse.Code, http.StatusNotFound)
+	}
+
+	recreateResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop novo","stock":2}`)
+	if recreateResponse.Code != http.StatusCreated {
+		t.Fatalf("POST with deleted Product Code status = %d, want %d; body = %s", recreateResponse.Code, http.StatusCreated, recreateResponse.Body.String())
+	}
+}
+
+func TestDeleteProductReturnsNotFound(t *testing.T) {
+	response := performRequest(newTestRouter(t), http.MethodDelete, "/products/999", "")
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("DELETE /products/:id status = %d, want %d; body = %s", response.Code, http.StatusNotFound, response.Body.String())
+	}
+
+	var body map[string]string
+	decodeResponse(t, response, &body)
+	if body["error"] != "product not found" || len(body) != 1 {
+		t.Fatalf("DELETE /products/:id error = %#v, want {error: product not found}", body)
+	}
+}
+
 func TestCreateProductRejectsInvalidInput(t *testing.T) {
 	tests := []struct {
 		name string

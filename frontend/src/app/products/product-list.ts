@@ -2,11 +2,13 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSortModule, Sort, SortDirection } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { RouterLink } from '@angular/router';
 import { Product } from './product';
 import { ProductApi } from './product-api';
@@ -15,10 +17,29 @@ type StockFilter = 'all' | 'in-stock' | 'out-of-stock';
 type SortColumn = 'code' | 'description' | 'stock' | 'createdAt' | 'updatedAt';
 
 @Component({
+  selector: 'app-delete-product-dialog',
+  imports: [MatButtonModule, MatDialogModule],
+  template: `
+    <h2 mat-dialog-title>Excluir produto</h2>
+    <mat-dialog-content>
+      Excluir permanentemente <strong>{{ product.code }}</strong> — {{ product.description }}?
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button type="button" [mat-dialog-close]="false">Cancelar</button>
+      <button mat-flat-button type="button" [mat-dialog-close]="true">Excluir</button>
+    </mat-dialog-actions>
+  `,
+})
+export class DeleteProductDialog {
+  readonly product = inject<Product>(MAT_DIALOG_DATA);
+}
+
+@Component({
   selector: 'app-product-list',
   imports: [
     DatePipe,
     MatButtonModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
     MatProgressSpinnerModule,
@@ -32,11 +53,15 @@ type SortColumn = 'code' | 'description' | 'stock' | 'createdAt' | 'updatedAt';
 })
 export class ProductList implements OnInit {
   private readonly productApi = inject(ProductApi);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackBar = inject(MatSnackBar);
 
   readonly displayedColumns = ['code', 'description', 'stock', 'createdAt', 'updatedAt', 'actions'];
   readonly products = signal<Product[]>([]);
   readonly loading = signal(true);
   readonly loadFailed = signal(false);
+  readonly deletingProductId = signal<number | null>(null);
+  readonly deleteError = signal('');
   readonly searchControl = new FormControl('', { nonNullable: true });
   readonly stockFilterControl = new FormControl<StockFilter>('all', { nonNullable: true });
   readonly pageSizeControl = new FormControl(10, { nonNullable: true });
@@ -123,5 +148,37 @@ export class ProductList implements OnInit {
 
   nextPage() {
     this.pageIndex.update((page) => Math.min(this.totalPages() - 1, page + 1));
+  }
+
+  confirmDelete(product: Product) {
+    if (this.deletingProductId() !== null) {
+      return;
+    }
+
+    this.dialog
+      .open(DeleteProductDialog, { data: product })
+      .beforeClosed()
+      .subscribe((confirmed) => {
+        if (confirmed) {
+          this.deleteProduct(product);
+        }
+      });
+  }
+
+  private deleteProduct(product: Product) {
+    this.deleteError.set('');
+    this.deletingProductId.set(product.id);
+    this.productApi.delete(product.id).subscribe({
+      next: () => {
+        this.products.update((products) => products.filter((current) => current.id !== product.id));
+        this.pageIndex.update((page) => Math.min(page, this.totalPages() - 1));
+        this.deletingProductId.set(null);
+        this.snackBar.open('Produto excluído com sucesso', 'Fechar', { duration: 4000 });
+      },
+      error: () => {
+        this.deletingProductId.set(null);
+        this.deleteError.set('Não foi possível excluir o produto. Tente novamente.');
+      },
+    });
   }
 }
