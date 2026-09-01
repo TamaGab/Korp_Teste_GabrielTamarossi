@@ -21,10 +21,11 @@ import (
 var productCodePattern = regexp.MustCompile(`^[A-Z]{3}[0-9]{2}$`)
 
 type Invoice struct {
-	Number    string        `json:"number"`
-	Status    string        `json:"status"`
-	Lines     []InvoiceLine `json:"lines,omitempty"`
-	CreatedAt time.Time     `json:"createdAt"`
+	Number         string        `json:"number"`
+	Status         string        `json:"status"`
+	ClosingPending bool          `json:"closingPending"`
+	Lines          []InvoiceLine `json:"lines,omitempty"`
+	CreatedAt      time.Time     `json:"createdAt"`
 }
 
 type InvoiceLine struct {
@@ -375,7 +376,7 @@ func (h handler) validateStock(ctx context.Context, lines []stockLine) (stockRes
 
 func (h handler) list(c *gin.Context) {
 	rows, err := h.pool.Query(c.Request.Context(), `
-		SELECT number, status, created_at
+		SELECT number, status, closing_pending, created_at
 		FROM invoices
 		ORDER BY number DESC
 	`)
@@ -389,7 +390,7 @@ func (h handler) list(c *gin.Context) {
 	for rows.Next() {
 		var number int64
 		var current Invoice
-		if err := rows.Scan(&number, &current.Status, &current.CreatedAt); err != nil {
+		if err := rows.Scan(&number, &current.Status, &current.ClosingPending, &current.CreatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not list invoices"})
 			return
 		}
@@ -414,10 +415,10 @@ func (h handler) get(c *gin.Context) {
 
 	current := Invoice{Number: fmt.Sprintf("%04d", number)}
 	if err := h.pool.QueryRow(c.Request.Context(), `
-		SELECT status, created_at
+		SELECT status, closing_pending, created_at
 		FROM invoices
 		WHERE number = $1
-	`, number).Scan(&current.Status, &current.CreatedAt); err != nil {
+	`, number).Scan(&current.Status, &current.ClosingPending, &current.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "invoice not found"})
 			return

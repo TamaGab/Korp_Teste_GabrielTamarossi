@@ -22,14 +22,16 @@
           mat-flat-button
           type="button"
           [disabled]="preparingPrint() || closingInvoice()"
-          (click)="preparePrint()"
+          (click)="current.closingPending ? retryClosing() : preparePrint()"
         >
           {{
             closingInvoice()
               ? 'Finalizando nota fiscal...'
               : preparingPrint()
                 ? 'Verificando estoque...'
-                : 'Imprimir'
+                : current.closingPending
+                  ? 'Tentar finalizar novamente'
+                  : 'Imprimir'
           }}
         </button>
       }

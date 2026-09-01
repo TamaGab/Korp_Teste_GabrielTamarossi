@@ -253,6 +253,42 @@ describe('InvoiceDetail', () => {
     http.verify();
   });
 
+  it('offers closing retry without printing again after closing fails', () => {
+    mockPrintFrame();
+    const fixture = TestBed.createComponent(InvoiceDetail);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('http://localhost:8082/invoices/0001').flush({
+      number: '0001',
+      status: 'OPEN',
+      closingPending: false,
+      createdAt: '2026-09-01T15:00:00Z',
+      lines: [{ code: 'LAP01', description: 'Laptop', quantity: 2 }],
+    });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    http
+      .expectOne('http://localhost:8082/invoices/0001/prepare-print')
+      .flush({ html: '<html><body>Nota Fiscal 0001</body></html>' });
+    http
+      .expectOne('http://localhost:8082/invoices/0001/close')
+      .flush({ error: 'inventory unavailable' }, { status: 502, statusText: 'Bad Gateway' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain(
+      'Não foi possível finalizar a nota fiscal. Tente novamente.',
+    );
+    const retryButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(retryButton.textContent).toContain('Tentar finalizar novamente');
+    retryButton.click();
+    http
+      .expectOne('http://localhost:8082/invoices/0001/close')
+      .flush({ number: '0001', status: 'CLOSED' });
+    http.expectNone('http://localhost:8082/invoices/0001/prepare-print');
+    http.verify();
+  });
+
   it('shows every stock problem in Portuguese without opening a window', () => {
     const open = vi.spyOn(window, 'open');
     const fixture = TestBed.createComponent(InvoiceDetail);
@@ -326,6 +362,64 @@ describe('InvoiceDetail', () => {
     expect((fixture.nativeElement.querySelector('button') as HTMLButtonElement).disabled).toBe(
       false,
     );
+    http.verify();
+  });
+
+  it('offers retry instead of printing when a Pending Invoice Closing is loaded', () => {
+    const open = vi.spyOn(window, 'open');
+    const fixture = TestBed.createComponent(InvoiceDetail);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('http://localhost:8082/invoices/0001').flush({
+      number: '0001',
+      status: 'OPEN',
+      closingPending: true,
+      createdAt: '2026-09-01T15:00:00Z',
+      lines: [{ code: 'LAP01', description: 'Laptop', quantity: 2 }],
+    });
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(button.textContent).toContain('Tentar finalizar novamente');
+    button.click();
+
+    const closeRequest = http.expectOne('http://localhost:8082/invoices/0001/close');
+    expect(closeRequest.request.method).toBe('POST');
+    http.expectNone('http://localhost:8082/invoices/0001/prepare-print');
+    expect(open).not.toHaveBeenCalled();
+    closeRequest.flush({ number: '0001', status: 'CLOSED' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Fechada');
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    http.verify();
+  });
+
+  it('keeps offering retry with Portuguese feedback after repeated closing failures', () => {
+    const fixture = TestBed.createComponent(InvoiceDetail);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('http://localhost:8082/invoices/0001').flush({
+      number: '0001',
+      status: 'OPEN',
+      closingPending: true,
+      createdAt: '2026-09-01T15:00:00Z',
+      lines: [{ code: 'LAP01', description: 'Laptop', quantity: 2 }],
+    });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    http
+      .expectOne('http://localhost:8082/invoices/0001/close')
+      .flush({ error: 'inventory unavailable' }, { status: 502, statusText: 'Bad Gateway' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain(
+      'Não foi possível finalizar a nota fiscal. Tente novamente.',
+    );
+    const retryButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(retryButton.disabled).toBe(false);
+    expect(retryButton.textContent).toContain('Tentar finalizar novamente');
     http.verify();
   });
 

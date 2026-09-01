@@ -386,6 +386,43 @@ func TestPreparingPrintKeepsOpenInvoiceWhenInventoryIsUnavailable(t *testing.T) 
 	}
 }
 
+func TestPreparingPrintCanBeRetriedAfterInventoryRecovers(t *testing.T) {
+	validationAttempts := 0
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/products" {
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"Laptop"}]`))
+			return
+		}
+		validationAttempts++
+		if validationAttempts == 1 {
+			response.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = response.Write([]byte(`{"error":"unavailable"}`))
+			return
+		}
+		_, _ = response.Write([]byte(`{"problems":[]}`))
+	}))
+	t.Cleanup(inventory.Close)
+	router := newTestRouter(t, inventory.URL)
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":1}]}`)
+
+	firstPreparation := performRequest(router, http.MethodPost, "/invoices/0001/prepare-print", "")
+	if firstPreparation.Code != http.StatusBadGateway {
+		t.Fatalf("first POST prepare-print status = %d, want 502; body = %s", firstPreparation.Code, firstPreparation.Body.String())
+	}
+	getResponse := performRequest(router, http.MethodGet, "/invoices/0001", "")
+	var open invoice.Invoice
+	decodeResponse(t, getResponse, &open)
+	if open.Status != "OPEN" || open.ClosingPending {
+		t.Fatalf("Invoice after unavailable inventory = %q / pending %t, want OPEN / false", open.Status, open.ClosingPending)
+	}
+
+	secondPreparation := performRequest(router, http.MethodPost, "/invoices/0001/prepare-print", "")
+	if secondPreparation.Code != http.StatusOK || validationAttempts != 2 {
+		t.Fatalf("retried POST prepare-print = %d with %d attempts, want 200 with 2 attempts; body = %s", secondPreparation.Code, validationAttempts, secondPreparation.Body.String())
+	}
+}
+
 func TestUserCanCloseAnOpenInvoiceAndConsumeItsPersistedLines(t *testing.T) {
 	var consumptionBody struct {
 		InvoiceNumber string `json:"invoiceNumber"`
@@ -497,8 +534,8 @@ func TestPendingInvoiceClosingCanRetryWithoutPreparingOrPrintingAgain(t *testing
 	getResponse := performRequest(router, http.MethodGet, "/invoices/0001", "")
 	var pending invoice.Invoice
 	decodeResponse(t, getResponse, &pending)
-	if pending.Status != "OPEN" {
-		t.Fatalf("Invoice after failed close = %q, want OPEN", pending.Status)
+	if pending.Status != "OPEN" || !pending.ClosingPending {
+		t.Fatalf("Invoice after failed close = %q / pending %t, want OPEN / true", pending.Status, pending.ClosingPending)
 	}
 	prepareResponse := performRequest(router, http.MethodPost, "/invoices/0001/prepare-print", "")
 	if prepareResponse.Code != http.StatusConflict {
@@ -508,6 +545,83 @@ func TestPendingInvoiceClosingCanRetryWithoutPreparingOrPrintingAgain(t *testing
 	secondClose := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
 	if secondClose.Code != http.StatusOK || consumptionAttempts != 2 {
 		t.Fatalf("retried POST close = %d with %d attempts, want 200 with 2 attempts", secondClose.Code, consumptionAttempts)
+	}
+}
+
+func TestPendingInvoiceClosingRetriesAfterStockWasConsumedButClosingWasNotPersisted(t *testing.T) {
+	consumptionAttempts := 0
+	stockConsumptions := 0
+	processedInvoices := make(map[string]json.RawMessage)
+	inventory := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/products" {
+			_, _ = response.Write([]byte(`[{"id":1,"code":"LAP01","description":"Laptop","stock":5}]`))
+			return
+		}
+		consumptionAttempts++
+		var body struct {
+			InvoiceNumber string          `json:"invoiceNumber"`
+			Lines         json.RawMessage `json:"lines"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Errorf("decode Stock Consumption request: %v", err)
+		}
+		if previous, exists := processedInvoices[body.InvoiceNumber]; exists {
+			if !bytes.Equal(previous, body.Lines) {
+				response.WriteHeader(http.StatusConflict)
+				_, _ = response.Write([]byte(`{"error":"idempotency conflict"}`))
+				return
+			}
+		} else {
+			processedInvoices[body.InvoiceNumber] = append(json.RawMessage(nil), body.Lines...)
+			stockConsumptions++
+		}
+		_, _ = response.Write([]byte(`{"problems":[]}`))
+	}))
+	t.Cleanup(inventory.Close)
+	router, pool := newTestRouterWithPool(t, inventory.URL)
+	performRequest(router, http.MethodPost, "/invoices", `{"lines":[{"productCode":"LAP01","quantity":2}]}`)
+
+	if _, err := pool.Exec(context.Background(), `
+		CREATE FUNCTION fail_invoice_closing() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.status = 'CLOSED' THEN
+				RAISE EXCEPTION 'simulated persistence failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER fail_invoice_closing
+		BEFORE UPDATE ON invoices
+		FOR EACH ROW EXECUTE FUNCTION fail_invoice_closing();
+	`); err != nil {
+		t.Fatalf("install Invoice Closing failure: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "DROP TRIGGER IF EXISTS fail_invoice_closing ON invoices")
+		_, _ = pool.Exec(context.Background(), "DROP FUNCTION IF EXISTS fail_invoice_closing()")
+	})
+
+	firstClose := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
+	if firstClose.Code != http.StatusInternalServerError {
+		t.Fatalf("first POST close status = %d, want 500; body = %s", firstClose.Code, firstClose.Body.String())
+	}
+	getResponse := performRequest(router, http.MethodGet, "/invoices/0001", "")
+	var pending invoice.Invoice
+	decodeResponse(t, getResponse, &pending)
+	if pending.Status != "OPEN" || !pending.ClosingPending {
+		t.Fatalf("Invoice after persistence failure = %q / pending %t, want OPEN / true", pending.Status, pending.ClosingPending)
+	}
+
+	if _, err := pool.Exec(context.Background(), "DROP TRIGGER fail_invoice_closing ON invoices"); err != nil {
+		t.Fatalf("remove Invoice Closing failure: %v", err)
+	}
+	secondClose := performRequest(router, http.MethodPost, "/invoices/0001/close", "")
+	if secondClose.Code != http.StatusOK {
+		t.Fatalf("retried POST close status = %d, want 200; body = %s", secondClose.Code, secondClose.Body.String())
+	}
+	if consumptionAttempts != 2 || stockConsumptions != 1 {
+		t.Fatalf("Stock Consumption attempts / effects = %d / %d, want 2 / 1", consumptionAttempts, stockConsumptions)
 	}
 }
 

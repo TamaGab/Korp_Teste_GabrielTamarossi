@@ -56,7 +56,13 @@ export class InvoiceDetail implements OnInit {
 
   preparePrint() {
     const current = this.invoice();
-    if (!current || current.status !== 'OPEN' || this.preparingPrint() || this.closingInvoice()) {
+    if (
+      !current ||
+      current.status !== 'OPEN' ||
+      current.closingPending ||
+      this.preparingPrint() ||
+      this.closingInvoice()
+    ) {
       return;
     }
 
@@ -113,16 +119,32 @@ export class InvoiceDetail implements OnInit {
       });
   }
 
+  retryClosing() {
+    const current = this.invoice();
+    if (
+      !current ||
+      current.status !== 'OPEN' ||
+      !current.closingPending ||
+      this.closingInvoice()
+    ) {
+      return;
+    }
+    this.closeInvoice(current.number);
+  }
+
   private closeInvoice(number: string) {
     this.closingInvoice.set(true);
     this.actionErrorMessages.set([]);
+    this.invoice.update((current) =>
+      current ? { ...current, closingPending: true } : current,
+    );
     this.invoiceApi
       .close(number)
       .pipe(finalize(() => this.closingInvoice.set(false)))
       .subscribe({
         next: (closed) => {
           this.invoice.update((current) =>
-            current ? { ...current, status: closed.status } : current,
+            current ? { ...current, status: closed.status, closingPending: false } : current,
           );
         },
         error: () => {

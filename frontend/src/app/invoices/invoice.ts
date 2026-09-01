@@ -1,6 +1,7 @@
 export interface Invoice {
   number: string;
   status: 'OPEN' | 'CLOSED';
+  closingPending: boolean;
   lines: InvoiceLine[];
   createdAt: string;
 }
