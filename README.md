@@ -123,12 +123,12 @@ docker compose exec frontend npm run build
 Run the automated test against the complete stack from the repository root:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e e2e
+./scripts/test-e2e.sh
 ```
 
-Compose starts an `e2e` container containing Playwright and a headless Chromium browser. Headless
-means that Chromium behaves like a browser without opening a visible window. It accesses the
-Angular frontend and both APIs through the internal Docker network.
+The script starts a separate Compose project named `korp-e2e`. It creates fresh Inventory and
+Billing database volumes, exposes no E2E ports on the host, and lets the Playwright browser access
+the application through Docker's internal network.
 
 The browser test performs this workflow:
 
@@ -138,18 +138,13 @@ The browser test performs this workflow:
 4. Confirm through the UI that the Invoice is Closed and Available Stock is now `3`.
 5. Delete the temporary Product through the inventory API.
 
-The terminal displays `1 passed` when the workflow succeeds. On failure, it displays the failed
-action, source line, expected result, and actual result. Playwright also saves a detailed browser
-trace inside the stopped `e2e` container. Copy the failure artifacts to the host with:
+The complete terminal output is saved on both success and failure in
+`frontend/test-results/e2e.log`. On failure, Playwright results and the browser trace are copied to
+`frontend/test-results/`; the trace is stored in the failed test's directory as `trace.zip`.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.e2e.yml \
-  cp e2e:/app/test-results ./frontend/test-results
-```
-
-The test removes its temporary Product, but the Closed Invoice remains in the persisted Billing
-database because the application does not provide an Invoice deletion endpoint. Compose finishes
-the test command when Chromium exits.
+After the test finishes, successfully or not, the script removes only the `korp-e2e` containers,
+network, and disposable volumes. The normal demonstration containers, database volumes, and data
+are not changed.
 
 Inspect service logs:
 

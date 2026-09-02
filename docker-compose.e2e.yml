@@ -1,5 +1,6 @@
 services:
   frontend:
+    ports: !reset []
     command:
       - npm
       - start
@@ -14,12 +15,20 @@ services:
       - '__BILLING_API_URL__="http://billing-service:8082"'
 
   inventory-service:
+    ports: !reset []
     environment:
       CORS_ALLOWED_ORIGIN: http://frontend:4200
 
   billing-service:
+    ports: !reset []
     environment:
       CORS_ALLOWED_ORIGIN: http://frontend:4200
+
+  inventory-db:
+    ports: !reset []
+
+  billing-db:
+    ports: !reset []
 
   e2e:
     build:
