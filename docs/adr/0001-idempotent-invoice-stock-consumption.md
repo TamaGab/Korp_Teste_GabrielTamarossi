@@ -1,3 +1,0 @@
-# Make invoice stock consumption idempotent
-
-Invoice Closing reduces stock in the inventory service before the billing service can persist the Closed status, so an HTTP response or billing update can fail after stock has already changed. Before requesting Stock Consumption, the billing service will persist a Pending Invoice Closing marker while keeping the public status Open. The inventory service will consume all Invoice Lines atomically and use the Invoice identifier as an idempotency key, allowing the billing service to resume a pending closing after a failure without reducing stock twice. This keeps stock non-negative under concurrent closings and avoids adding distributed transaction infrastructure to this technical challenge.

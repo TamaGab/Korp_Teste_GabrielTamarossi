@@ -138,8 +138,6 @@ Estoque e faturamento foram separados por responsabilidade de negócio. Cada ser
 ├── scripts/
 ├── docker-compose.yml
 ├── docker-compose.e2e.yml
-├── AGENTS.md
-├── CONTEXT.md
 └── README.md
 ```
 
