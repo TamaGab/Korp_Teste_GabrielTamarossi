@@ -118,6 +118,39 @@ docker compose exec frontend npm test
 docker compose exec frontend npm run build
 ```
 
+### End-to-end test
+
+Run the automated test against the complete stack from the repository root:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e e2e
+```
+
+Compose starts an `e2e` container containing Playwright and a headless Chromium browser. Headless
+means that Chromium behaves like a browser without opening a visible window. It accesses the
+Angular frontend and both APIs through the internal Docker network.
+
+The browser test performs this workflow:
+
+1. Create a Product with Available Stock `5` through the Angular UI.
+2. Create an Invoice that uses `2` units of that Product.
+3. Dismiss the simulated print dialog and close the Invoice.
+4. Confirm through the UI that the Invoice is Closed and Available Stock is now `3`.
+5. Delete the temporary Product through the inventory API.
+
+The terminal displays `1 passed` when the workflow succeeds. On failure, it displays the failed
+action, source line, expected result, and actual result. Playwright also saves a detailed browser
+trace inside the stopped `e2e` container. Copy the failure artifacts to the host with:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml \
+  cp e2e:/app/test-results ./frontend/test-results
+```
+
+The test removes its temporary Product, but the Closed Invoice remains in the persisted Billing
+database because the application does not provide an Invoice deletion endpoint. Compose finishes
+the test command when Chromium exits.
+
 Inspect service logs:
 
 ```bash

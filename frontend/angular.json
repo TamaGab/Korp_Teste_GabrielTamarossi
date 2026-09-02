@@ -54,6 +54,9 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "allowedHosts": ["frontend"]
+          },
           "configurations": {
             "production": {
               "buildTarget": "Korp_Teste_GabrielTamarossi:build:production"

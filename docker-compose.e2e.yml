@@ -1,0 +1,39 @@
+services:
+  frontend:
+    command:
+      - npm
+      - start
+      - --
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4200"
+      - --define
+      - '__INVENTORY_API_URL__="http://inventory-service:8081"'
+      - --define
+      - '__BILLING_API_URL__="http://billing-service:8082"'
+
+  inventory-service:
+    environment:
+      CORS_ALLOWED_ORIGIN: http://frontend:4200
+
+  billing-service:
+    environment:
+      CORS_ALLOWED_ORIGIN: http://frontend:4200
+
+  e2e:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.e2e
+    environment:
+      BASE_URL: http://frontend:4200
+      INVENTORY_API_URL: http://inventory-service:8081
+    depends_on:
+      frontend:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      billing-service:
+        condition: service_healthy
+    networks:
+      - challenge-network
