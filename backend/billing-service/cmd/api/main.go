@@ -18,6 +18,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Inicialização do serviço
+
 const shutdownTimeout = 10 * time.Second
 
 func main() {
@@ -102,6 +104,8 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
+// Configuração do ambiente
+
 func requiredEnvironment(name string) (string, error) {
 	value := os.Getenv(name)
 	if value == "" {
@@ -109,6 +113,8 @@ func requiredEnvironment(name string) (string, error) {
 	}
 	return value, nil
 }
+
+// Controle de acesso CORS
 
 func corsMiddleware(allowedOrigin string) gin.HandlerFunc {
 	return func(c *gin.Context) {

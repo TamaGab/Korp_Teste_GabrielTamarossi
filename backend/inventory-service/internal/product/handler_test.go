@@ -17,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Criação e consulta de produtos
+
 func TestUserCanCreateAndListProduct(t *testing.T) {
 	router := newTestRouter(t)
 
@@ -80,6 +82,8 @@ func TestGetProductReturnsNotFound(t *testing.T) {
 		t.Fatalf("GET /products/:id error = %#v, want {error: product not found}", body)
 	}
 }
+
+// Atualização de produtos
 
 func TestUserCanUpdateProductWithoutChangingItsIdentity(t *testing.T) {
 	router := newTestRouter(t)
@@ -159,6 +163,8 @@ func TestUpdateProductRejectsDuplicateCode(t *testing.T) {
 	}
 }
 
+// Exclusão de produtos
+
 func TestUserCanDeleteProductAndReuseItsCode(t *testing.T) {
 	router := newTestRouter(t)
 	createResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":7}`)
@@ -196,6 +202,8 @@ func TestDeleteProductReturnsNotFound(t *testing.T) {
 		t.Fatalf("DELETE /products/:id error = %#v, want {error: product not found}", body)
 	}
 }
+
+// Validação e concorrência na criação
 
 func TestCreateProductRejectsInvalidInput(t *testing.T) {
 	tests := []struct {
@@ -272,6 +280,8 @@ func TestConcurrentCreateProductAllowsOnlyOneProductCode(t *testing.T) {
 	}
 }
 
+// Validação de estoque
+
 func TestStockValidationReturnsEveryBlockingProductWithoutChangingStock(t *testing.T) {
 	router := newTestRouter(t)
 	firstResponse := performRequest(router, http.MethodPost, "/products", `{"code":"LAP01","description":"Laptop","stock":2}`)
@@ -347,6 +357,8 @@ func TestStockValidationRejectsInvalidInput(t *testing.T) {
 		}
 	}
 }
+
+// Consumo de estoque
 
 func TestInvoiceCanConsumeEveryStockLineAtomically(t *testing.T) {
 	router := newTestRouter(t)
@@ -497,6 +509,8 @@ func TestConcurrentInvoicesCannotConsumeTheSameLastUnits(t *testing.T) {
 	}
 }
 
+// Restrições de persistência
+
 func TestDatabasePreservesProductInvariants(t *testing.T) {
 	pool := newTestPool(t)
 	tests := []struct {
@@ -537,6 +551,8 @@ func TestDatabaseRejectsDuplicateProductCode(t *testing.T) {
 		t.Fatal("database accepted a duplicate Product Code")
 	}
 }
+
+// Funções auxiliares
 
 func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()

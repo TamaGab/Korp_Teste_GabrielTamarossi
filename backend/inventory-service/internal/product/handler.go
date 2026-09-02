@@ -18,6 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Tipos e estruturas
+
 var codePattern = regexp.MustCompile(`^[A-Z]{3}[0-9]{2}$`)
 
 type Product struct {
@@ -60,6 +62,8 @@ type handler struct {
 	pool *pgxpool.Pool
 }
 
+// Registro de rotas
+
 func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool) {
 	h := handler{pool: pool}
 	router.POST("/products", h.create)
@@ -70,6 +74,8 @@ func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool) {
 	router.POST("/stock/validate", h.validateStock)
 	router.POST("/stock/consume", h.consumeStock)
 }
+
+// Processamento de estoque
 
 func (h handler) consumeStock(c *gin.Context) {
 	var request stockConsumptionRequest
@@ -268,6 +274,8 @@ func validStockLines(lines []stockLine) bool {
 	return true
 }
 
+// Consulta e manutenção de produtos
+
 func (h handler) delete(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
@@ -447,6 +455,8 @@ func (h handler) list(c *gin.Context) {
 
 	c.JSON(http.StatusOK, products)
 }
+
+// Validação de produtos
 
 func validateProduct(request productRequest) string {
 	if !codePattern.MatchString(request.Code) {

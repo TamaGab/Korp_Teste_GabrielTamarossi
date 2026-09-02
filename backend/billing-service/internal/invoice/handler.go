@@ -18,6 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Tipos e estruturas
+
 var productCodePattern = regexp.MustCompile(`^[A-Z]{3}[0-9]{2}$`)
 
 type Invoice struct {
@@ -116,6 +118,8 @@ type handler struct {
 	httpClient   *http.Client
 }
 
+// Registro de rotas
+
 func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool, inventoryURL string, httpClient *http.Client) {
 	h := handler{
 		pool:         pool,
@@ -128,6 +132,8 @@ func RegisterRoutes(router gin.IRoutes, pool *pgxpool.Pool, inventoryURL string,
 	router.POST("/invoices/:number/prepare-print", h.preparePrint)
 	router.POST("/invoices/:number/close", h.close)
 }
+
+// Fechamento de notas fiscais
 
 func (h handler) close(c *gin.Context) {
 	number, err := strconv.ParseInt(c.Param("number"), 10, 64)
@@ -233,28 +239,7 @@ func (h handler) close(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"number": fmt.Sprintf("%04d", number), "status": "CLOSED"})
 }
 
-func (h handler) consumeStock(ctx context.Context, invoiceNumber string, lines []stockLine) (stockResponse, int, error) {
-	payload, err := json.Marshal(stockConsumptionRequest{InvoiceNumber: invoiceNumber, Lines: lines})
-	if err != nil {
-		return stockResponse{}, 0, err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, h.inventoryURL+"/stock/consume", bytes.NewReader(payload))
-	if err != nil {
-		return stockResponse{}, 0, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := h.httpClient.Do(request)
-	if err != nil {
-		return stockResponse{}, 0, err
-	}
-	defer response.Body.Close()
-
-	var consumption stockResponse
-	if err := json.NewDecoder(response.Body).Decode(&consumption); err != nil {
-		return stockResponse{}, response.StatusCode, fmt.Errorf("decode stock consumption: %w", err)
-	}
-	return consumption, response.StatusCode, nil
-}
+// Preparação para impressão
 
 func (h handler) preparePrint(c *gin.Context) {
 	number, err := strconv.ParseInt(c.Param("number"), 10, 64)
@@ -364,28 +349,7 @@ func (h handler) preparePrint(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"html": html.String()})
 }
 
-func (h handler) validateStock(ctx context.Context, lines []stockLine) (stockResponse, int, error) {
-	payload, err := json.Marshal(stockRequest{Lines: lines})
-	if err != nil {
-		return stockResponse{}, 0, err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, h.inventoryURL+"/stock/validate", bytes.NewReader(payload))
-	if err != nil {
-		return stockResponse{}, 0, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := h.httpClient.Do(request)
-	if err != nil {
-		return stockResponse{}, 0, err
-	}
-	defer response.Body.Close()
-
-	var validation stockResponse
-	if err := json.NewDecoder(response.Body).Decode(&validation); err != nil {
-		return stockResponse{}, response.StatusCode, fmt.Errorf("decode stock validation: %w", err)
-	}
-	return validation, response.StatusCode, nil
-}
+// Consulta de notas fiscais
 
 func (h handler) list(c *gin.Context) {
 	rows, err := h.pool.Query(c.Request.Context(), `
@@ -469,6 +433,8 @@ func (h handler) get(c *gin.Context) {
 
 	c.JSON(http.StatusOK, current)
 }
+
+// Criação de notas fiscais
 
 func (h handler) create(c *gin.Context) {
 	var request invoiceRequest
@@ -556,6 +522,54 @@ func (h handler) create(c *gin.Context) {
 	})
 }
 
+// Comunicação com o serviço de estoque
+
+func (h handler) consumeStock(ctx context.Context, invoiceNumber string, lines []stockLine) (stockResponse, int, error) {
+	payload, err := json.Marshal(stockConsumptionRequest{InvoiceNumber: invoiceNumber, Lines: lines})
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, h.inventoryURL+"/stock/consume", bytes.NewReader(payload))
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := h.httpClient.Do(request)
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	defer response.Body.Close()
+
+	var consumption stockResponse
+	if err := json.NewDecoder(response.Body).Decode(&consumption); err != nil {
+		return stockResponse{}, response.StatusCode, fmt.Errorf("decode stock consumption: %w", err)
+	}
+	return consumption, response.StatusCode, nil
+}
+
+func (h handler) validateStock(ctx context.Context, lines []stockLine) (stockResponse, int, error) {
+	payload, err := json.Marshal(stockRequest{Lines: lines})
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, h.inventoryURL+"/stock/validate", bytes.NewReader(payload))
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := h.httpClient.Do(request)
+	if err != nil {
+		return stockResponse{}, 0, err
+	}
+	defer response.Body.Close()
+
+	var validation stockResponse
+	if err := json.NewDecoder(response.Body).Decode(&validation); err != nil {
+		return stockResponse{}, response.StatusCode, fmt.Errorf("decode stock validation: %w", err)
+	}
+	return validation, response.StatusCode, nil
+}
+
 func (h handler) listProducts(ctx context.Context) ([]inventoryProduct, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, h.inventoryURL+"/products", nil)
 	if err != nil {
@@ -577,6 +591,8 @@ func (h handler) listProducts(ctx context.Context) ([]inventoryProduct, error) {
 	}
 	return products, nil
 }
+
+// Validação de notas fiscais
 
 func validateInvoice(request invoiceRequest) string {
 	if len(request.Lines) == 0 {

@@ -17,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Criação e consulta de notas fiscais
+
 func TestUserCanCreateOpenInvoiceWithProductSnapshots(t *testing.T) {
 	inventory := newInventoryServer(t, map[string]string{
 		"/products": `[{"id":1,"code":"LAP01","description":"Laptop","stock":7},{"id":2,"code":"MON01","description":"Monitor","stock":0}]`,
@@ -188,6 +190,8 @@ func TestOpenAndClosedInvoicesRemainConsultable(t *testing.T) {
 	}
 }
 
+// Validação da criação
+
 func TestCreateInvoiceRejectsInvalidInput(t *testing.T) {
 	inventory := newInventoryServer(t, map[string]string{
 		"/products": `[{"id":1,"code":"LAP01","description":"Laptop","stock":7}]`,
@@ -260,6 +264,8 @@ func TestCreateInvoiceReturnsBadGatewayWhenInventoryFails(t *testing.T) {
 		t.Fatalf("POST /invoices inventory failure error = %q, want could not validate products", body["error"])
 	}
 }
+
+// Preparação para impressão
 
 func TestUserCanPreparePrintableHTMLForAnEligibleInvoice(t *testing.T) {
 	var validationBody map[string]any
@@ -422,6 +428,8 @@ func TestPreparingPrintCanBeRetriedAfterInventoryRecovers(t *testing.T) {
 		t.Fatalf("retried POST prepare-print = %d with %d attempts, want 200 with 2 attempts; body = %s", secondPreparation.Code, validationAttempts, secondPreparation.Body.String())
 	}
 }
+
+// Fechamento de notas fiscais
 
 func TestUserCanCloseAnOpenInvoiceAndConsumeItsPersistedLines(t *testing.T) {
 	var consumptionBody struct {
@@ -700,6 +708,8 @@ func TestRepeatingACompletedInvoiceClosingDoesNotCallInventoryAgain(t *testing.T
 		t.Fatalf("repeated POST close = %d / %d with %d Stock Consumptions, want 200 / 200 with one", firstClose.Code, secondClose.Code, consumptionAttempts)
 	}
 }
+
+// Funções auxiliares
 
 func newInventoryServer(t *testing.T, products map[string]string) *httptest.Server {
 	t.Helper()
